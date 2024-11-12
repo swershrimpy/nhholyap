@@ -2,6 +2,7 @@ import scipy
 import numpy as np
 from scipy.linalg import block_diag
 import cvxpy as cp
+import matplotlib as plt
 
 def calculate_lyapunov_P_matrix_abdelraouf(c, x0, A_list):
     """
@@ -51,3 +52,51 @@ def calculate_lyapunov_P_matrix_abdelraouf(c, x0, A_list):
 
 
 # TODO: Do a special case. Compute W Matrix for 2D systems. 
+
+
+def plot_reachable_set_2d(P_value, c, x0, actual_reachable_set_states=None):    
+    """
+    Plots 2D reachable set of the system from P matrix using Abdelraouf's formulation.
+    No dimensionality reduction here. TODO: For 2D systems, dimensionality reduction 
+    with W matrix is possible. Implement this.
+    Inputs:
+        P_value: P matrix of Lyapunov function.
+        c: order of Lyapunov function.
+        x0: equilibrium point.
+        actual_reachable_set_states: Pre-computed States in real reachable set. 
+    """
+    x1_vals = np.linspace(-2, 2, 400)
+    x2_vals = np.linspace(-2, 2, 400)
+    X1r, X2r = np.meshgrid(x1_vals, x2_vals)
+    Zr = np.zeros_like(X1r)
+
+    for i in range(X1r.shape[0]):
+        for j in range(X1r.shape[1]):
+            x_vec = np.array([X1r[i, j], X2r[i, j]])
+            x_vec_higher = np.copy(x_vec)
+            x_vec_list = [x_vec]
+            for _ in range(1, c):
+                x_vec_higher = np.kron(x_vec, x_vec_higher)
+                x_vec_list.append(x_vec_higher)
+            x_tilda = np.concatenate(x_vec_list)
+            Zr[i, j] = x_tilda.T @ P_value @ x_tilda
+
+    # Calculate level set passing through x0
+    # Calculate xi_0 using Abdelraouf's formulation.
+    xi_list = [np.copy(x0)]
+    for i in range(1, c):
+        xi_list.append(np.kron(x0, xi_list[-1]))
+    xc_0 = np.concatenate(xi_list)
+    level_set = xc_0.T @ P_value @ xc_0
+
+    # Find contour for the level set and return it
+    contour = plt.contour(X1r, X2r, Zr, 
+                        levels=[level_set], 
+                        colors=[colors[c_values.index(c)]], )
+    if actual_reachable_set_states is not None:
+        plt.fill(
+            actual_reachable_set_states[0, :], 
+            actual_reachable_set_states[1, :], 
+            color=(240/255, 230/255, 180/255), 
+            label='Reachable Set'
+            )
