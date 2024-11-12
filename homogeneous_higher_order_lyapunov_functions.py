@@ -52,6 +52,65 @@ def calculate_lyapunov_P_matrix(c, A_list):
     P_value = P.value   
     return P_value
 
+def generate_contour_from_2d_P_matrix(c, P_value, x0):
+    colors = [
+        (44/255, 123/255, 182/255),
+        (171/255, 217/255, 233/255),
+        (253/255, 174/255, 97/255),
+        (215/255, 25/255, 28/255)
+    ]
+    # Discretize the domain to find the level set
+    x1_vals = np.linspace(-2, 2, 400)
+    x2_vals = np.linspace(-2, 2, 400)
+    X1r, X2r = np.meshgrid(x1_vals, x2_vals)
+    Zr = np.zeros_like(X1r)
+
+    for i in range(X1r.shape[0]):
+        for j in range(X1r.shape[1]):
+            x_vec = np.array([X1r[i, j]**(c - g) * X2r[i, j]**g for g in range(c + 1)])
+            Zr[i, j] = x_vec.T @ P_value @ x_vec
+
+    # Calculate level set passing through x0
+    x0_vec = np.array([x0[0]**(c - g) * x0[1]**g for g in range(c + 1)])
+    level_set = x0_vec.T @ P_value @ x0_vec
+
+    # Find contour for the level set and return it
+    contour = plt.contour(X1r, X2r, Zr, 
+                        levels=[level_set], 
+                        )# colors=[colors[c]], )
+    return contour
+
+def plot_multiple_contours_2d(c_values, A_list, x0, actual_reachable_set_states=None):
+    plt.figure(figsize=(12, 12))
+    plt.grid(True)
+    plt.xlabel('$x_1$', fontsize=18)
+    plt.ylabel('$x_2$', fontsize=18)
+    plt.xlim([-3, 3])
+    plt.ylim([-3, 3])
+
+    # Plot level sets for each value in c_values
+    for i, c in enumerate(c_values):
+        # try:
+        P_value = calculate_lyapunov_P_matrix(c=c, A_list=A_list)
+        contour = generate_contour_from_2d_P_matrix(c=c, P_value=P_value, x0=x0)
+        label = f"{2*c}th order" if c != 1 else f"{2*c}nd order"
+        plt.clabel(contour, fmt=label)
+        # except ValueError as ve:
+        #     print(ve)
+            # print(f"{state_length*c}th order failed" if c != 1 else f"{state_length*c}nd order failed")
+
+    # Plot initial condition x0 = [1, 0]
+    # plt.scatter(x0[0], x0[1], s=80, c='green', marker='d', label='Initial State')
+    if actual_reachable_set_states is not None:
+        plt.fill(
+            actual_reachable_set_states[0, :], 
+            actual_reachable_set_states[1, :], 
+            color=(240/255, 230/255, 180/255), 
+            label='Reachable Set'
+            )
+
+    plt.legend(loc='lower right', fontsize=12)
+    plt.show()
 
 def meta_lyapunov_with_list_input(c, 
                                   x0,
@@ -182,12 +241,12 @@ def plot_reachable_set_from_hierarchical_lyap_func(A_list, x0, c_values=[1, 5, 8
     ]
 
     # Plot setup
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(12, 12))
     plt.grid(True)
     plt.xlabel('$x_1$', fontsize=18)
     plt.ylabel('$x_2$', fontsize=18)
-    plt.xlim([-1.5, 1.5])
-    plt.ylim([-1.5, 1.5])
+    plt.xlim([-3, 3])
+    plt.ylim([-3, 3])
 
     # Plot level sets for each value in c_values
     for i, c in enumerate(c_values):
