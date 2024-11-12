@@ -43,9 +43,9 @@ def calculate_lyapunov_P_matrix(c, A_list):
         constraints.append(
             P >> np.eye(state_length ** c)
         )
-        objective = cp.Minimize(P[0, 0])
-        problem = cp.Problem(objective, constraints)
-        problem.solve(solver=cp.CLARABEL)
+    objective = cp.Minimize(P[0, 0])
+    problem = cp.Problem(objective, constraints)
+    problem.solve(solver=cp.CLARABEL)
     if P.value is None:
         raise ValueError("No solution found")
 
@@ -104,9 +104,12 @@ def meta_lyapunov_with_list_input(c,
         # if problem.status in ["infeasible", "unbounded"]:
         #     raise ValueError("No solution found")
         if P.value is None:
+            print("No solution found")
             raise ValueError(f"{state_length*c}th order: no solution found")
 
         P_value = P.value
+        print(f"P_value for {c}th order is: ")
+        print(P_value)
         # Discretize the domain to find the level set
         x1_vals = np.linspace(-2, 2, 400)
         x2_vals = np.linspace(-2, 2, 400)
@@ -197,7 +200,7 @@ def plot_reachable_set_from_hierarchical_lyap_func(A_list, x0, c_values=[1, 5, 8
             # print(f"{state_length*c}th order failed" if c != 1 else f"{state_length*c}nd order failed")
 
     # Plot initial condition x0 = [1, 0]
-    plt.scatter(x0[0], x0[1], s=80, c='green', marker='d', label='Initial State')
+    # plt.scatter(x0[0], x0[1], s=80, c='green', marker='d', label='Initial State')
     if actual_reachable_set_states is not None:
         plt.fill(
             actual_reachable_set_states[0, :], 
