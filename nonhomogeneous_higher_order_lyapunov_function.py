@@ -4,9 +4,19 @@ from scipy.linalg import block_diag
 import cvxpy as cp
 
 def calculate_lyapunov_P_matrix_abdelraouf(c, x0, A_list):
+    """
+    Calculates P matrix for nonhomogeneous HO Lyapunov function according to Hassan Abdelraouf's paper.
+    Works for arbitrary dimension - SLOW.
+    Inputs:
+        c: order of Lyapunov function.
+        x0: equilibrium point.
+        A_list: list of A matrices in set M.
+
+    Returns:
+        P_value: P matrix for nonhomogeneous HO Lyapunov function.
+    """
     state_length = A_list[0].shape[0]
     final_P_tilda_dim = int(state_length * (state_length ** c - 1) / (state_length - 1))
-
 
     # Construct all B matrices
     Ac_list = [[np.copy(A_list[i]) for i in range(len(A_list))]]
@@ -20,7 +30,6 @@ def calculate_lyapunov_P_matrix_abdelraouf(c, x0, A_list):
             Ac_tilda_j.append(Ac_list[i][j])
         new_Ac_tilda = block_diag(*Ac_tilda_j)
         Ac_tilda_list.append(new_Ac_tilda)
-    # return
     P = cp.Variable((final_P_tilda_dim, final_P_tilda_dim), symmetric=True)
     constraints = [
         Ac.T @ P + P @ Ac << 0 for Ac in Ac_tilda_list]
@@ -33,9 +42,12 @@ def calculate_lyapunov_P_matrix_abdelraouf(c, x0, A_list):
     xc_0 = np.concatenate(xi_list)
     objective = cp.Minimize(xc_0.T @ P @ xc_0)
     problem = cp.Problem(objective, constraints)
-    problem.solve(solver=cp.CLARABEL)#, eps_abs=1e-12, eps_rel=1e-12)
+    problem.solve(solver=cp.CLARABEL)
     if P.value is None:
         raise ValueError("No solution found")
 
     P_value = P.value   
     return P_value
+
+
+# TODO: Do a special case. Compute W Matrix for 2D systems. 
