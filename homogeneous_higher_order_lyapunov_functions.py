@@ -2,6 +2,44 @@ import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
 
+def construct_hierarchy_matrices(c, A_list, B_list):
+    """
+    Constructs A and B matrices for homogeneous c-th order Hierarchical system.
+    dx/dt = Ax + Bu
+
+    Returns:
+    list of Ac and Bc, representing the system raised to a c-th order hierarchy.
+    """
+    state_length = A_list[0].shape[0]
+    assert len(A_list) == len(B_list)
+    use_W_flag = state_length == 2
+    if use_W_flag:
+        W = np.eye(state_length)
+        for i in range(1, c):
+            W = np.block([[W, np.zeros((2**i, 1))], [np.zeros((2**i, 1)), W]])
+    
+    # Construct all Reduced-Dimensional matrices
+    Ac_list = [np.copy(A_list[i]) for i in range(len(A_list))]
+    for i in range(1, c):
+        Ac_list = [np.kron(np.eye(state_length), Ac_list[_]) + np.kron(A_list[_], np.eye(state_length**i))
+                   for _ in range(len(Ac_list))]
+    if use_W_flag:
+        # If dimensionality reduction matrix is used, return reduced A matrices (call them Ar).
+        Arc_list = [np.linalg.pinv(W) @ Ac @ W for Ac in Ac_list]
+
+    # Construct all HO B matrices
+    Buc_list = [np.copy(B_list[i]) for i in range(len(B_list))]
+    for i in range(1, c):
+        Buc_list = [np.kron(np.copy(B_list[_]), Buc_list[_]) for _ in range(len(Buc_list))]
+    
+    if use_W_flag:
+        # If dimensionality reduction matrix is used, return reduced B matrices (call them Br).
+        Arc_list = [np.linalg.pinv(W) @ Ac @ W for Ac in Ac_list]
+        Brc_list = [np.linalg.pinv(W) @ Bc for Bc in Buc_list]
+        return Arc_list, Brc_list
+    else:
+        return Ac_list, Buc_list
+
 def calculate_lyapunov_P_matrix(c, A_list):
     """
     Calculates P matrix for homogeneous HO Lyapunov function according to Matthew Abate's paper.
@@ -225,7 +263,7 @@ def meta_lyapunov_with_list_input(c,
     return contour
 
 
-def plot_reachable_set_from_hierarchical_lyap_func(A_list, x0, c_values=[1, 5, 8, 9], actual_reachable_set_states=None):
+def plot_reachable_set_from_hierarchical_lyap_func(A_list, x0, c_values=[1, 5, 8, 9], actual_reachable_set_states=None, xlim=[-3, 3], ylim=[-3, 3]):
     """
     Plots reachable set resulting from Hierarchical Lyapunov Function.
     TODO: Rewrite to separate P matrix calculation and plotting.
@@ -245,8 +283,8 @@ def plot_reachable_set_from_hierarchical_lyap_func(A_list, x0, c_values=[1, 5, 8
     plt.grid(True)
     plt.xlabel('$x_1$', fontsize=18)
     plt.ylabel('$x_2$', fontsize=18)
-    plt.xlim([-3, 3])
-    plt.ylim([-3, 3])
+    plt.xlim(xlim)
+    plt.ylim(ylim)
 
     # Plot level sets for each value in c_values
     for i, c in enumerate(c_values):
