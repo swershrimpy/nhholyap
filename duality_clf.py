@@ -70,7 +70,7 @@ def find_lyapunov_and_gain(A, B, mu, x0):
             "message": "Problem is not solvable."
         }
 
-def find_lyapunov_and_gain_polytope(A_list, B_list, mu=None, x0=None, print_constraint=False):
+def find_lyapunov_and_gain_polytope(A_list, B_list, mu=None, x0=None, print_constraint=False, solver_verbose=False):
     """
     Solve for the Lyapunov function V(x) = x^T Q x and control gain K = Y Q^{-1}
     for the system \dot{x} = Ax + Bu with constraints, minimizing the gain K.
@@ -96,18 +96,19 @@ def find_lyapunov_and_gain_polytope(A_list, B_list, mu=None, x0=None, print_cons
     constraints = []
 
     # 1. Q > 0 (Positive definiteness of Q)
-    constraints.append(Q >> 0)
+    constraints.append(Q >> 0.01 * np.eye(n))
 
     # 2. Lyapunov inequality for each corner (Ai, Bi): AiQ + QAi^T + BiY + Y^TBi^T < 0
     for i in range(N):
         A = A_list[i]
         B = B_list[i]
-        constraints.append(A @ Q + Q @ A.T + B @ Y + Y.T @ B.T << 0)
+        constraints.append((A @ Q + Q @ A.T + B @ Y + Y.T @ B.T) << -0.01 * np.eye(n))
+
 
     if mu is not None:
         # 3. Initial condition constraint: [1 x(0)^T; x(0) Q] \geq 0
         X0_block = cp.bmat([
-            [cp.Constant(1), x0.T],
+            [cp.Constant(np.ones((1, 1))), x0.T],
             [x0, Q]
         ])
         constraints.append(X0_block >> 0)
@@ -131,14 +132,17 @@ def find_lyapunov_and_gain_polytope(A_list, B_list, mu=None, x0=None, print_cons
 
     # Solve the optimization problem
     problem = cp.Problem(objective, constraints)
-    problem.solve()
+    problem.solve(solver=cp.CVXOPT, feastol=1e-6, verbose=solver_verbose)
 
     # Results
     if problem.status == cp.OPTIMAL:
         Q_opt = Q.value
         Y_opt = Y.value
         K_opt = Y_opt @ np.linalg.inv(Q_opt)  # Compute the control gain K
-
+        if solver_verbose:
+            for i, constraint in enumerate(constraints):
+                violation = constraint.violation()
+                print(f"Constraint {i+1} violation: {violation}")
         return {
             "Q": Q_opt,
             "Y": Y_opt,
