@@ -23,7 +23,7 @@ from functools import reduce
 # Parameters
 x_init = np.array([0, 0, 0, 1])  # Initial state: [x, y, phi, v]
 x_des = np.array([5, 0.0, np.pi/4, 1.0])  # Desired state: [x_des, y_des, phi_des, v_des]
-mu = 1e8  # Bound on the norm of control input
+mu = 1  # Bound on the norm of control input
 dt = 0.02  # Time step for integration
 stop_threshold = 0.1  # Threshold for stopping condition (distance to desired state)
 car_length = 1.0  # Length of the car
@@ -76,8 +76,8 @@ def find_gains_recursively(A_ldi_list, B_ldi_list, mu, x_init, start_idx=0, end_
         return [(start_idx, end_idx, control_gain)]  # Return the successful gain for this range
     else:
         print(f"Failed to synthesize control gain from {start_idx} to {end_idx}.")
-        print("A_LDI:")
-        print(A_ldi_union)
+        # print("A_LDI:")
+        # print(A_ldi_union)
         pass
 
     # If no gain found and only one element left, return failure
@@ -99,7 +99,7 @@ A_ldi_list = data["A_ldi_list"]
 B_ldi_list = data["B_ldi_list"]
 
 # Perform binary search for control gains
-gains = find_gains_recursively(A_ldi_list, B_ldi_list, mu, x_init)
+gains = find_gains_recursively(A_ldi_list, B_ldi_list, mu, x_init, start_idx=0, end_idx=None)
 
 # Save gains with their corresponding trajectory segments
 with open("control_gains.pkl", "wb") as f:
@@ -185,18 +185,27 @@ NUM_FRAMES = 500
 def update_car(frame):
     global x_current
 
-    # Compute control input
+    # Compute control input based on closest reference point
     distances = np.linalg.norm(x_ref - x_current, axis=1)
     closest_index = np.argmin(distances)
+    
+    # Find the corresponding gain K for this segment
+    for (start_idx, end_idx, K) in gains:
+        if start_idx <= closest_index < end_idx:
+            control_gain = K
+            break
+    else:
+        control_gain = np.zeros((2, len(x_current)))  # Default zero gain if not found
 
+    # Compute control input
     u_star = u_ref[closest_index]
     x_star = x_ref[closest_index]
     u_fb = control_gain @ (x_current - x_star)
-    u = u_fb + u_star
+    u = u_star + u_fb
 
     omega, a = u
 
-    # Simulate the car's dynamics
+    # Simulate car dynamics
     x_next = x_current + car.f(0, x_current, u, jnp.zeros(1)) * dt
     x_current = x_next
 
@@ -237,6 +246,7 @@ def update_car(frame):
         ani_car.event_source.stop()
 
     return state_lines + control_lines + [feedback_line, car_line, car_traj]
+
 
 # Set animation speed
 animation_speed = 10

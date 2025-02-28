@@ -121,7 +121,7 @@ def find_lyapunov_and_gain_polytope(A_list, B_list, mu=None, x0=None, print_cons
         constraints.append(input_block >> 0)
 
     # Objective function.
-    objective = cp.Minimize((cp.trace(Q) - 1) ** 2)  
+    objective = cp.Minimize(cp.trace(Q))  
 
     if print_constraint:
         print("Constraints in the problem:")
@@ -133,6 +133,7 @@ def find_lyapunov_and_gain_polytope(A_list, B_list, mu=None, x0=None, print_cons
     # Solve the optimization problem
     problem = cp.Problem(objective, constraints)
     problem.solve(solver=cp.CVXOPT, feastol=1e-6, verbose=solver_verbose)
+    # problem.solve(solver=cp.CLARABEL, verbose=solver_verbose)
 
     # Results
     if problem.status == cp.OPTIMAL:
