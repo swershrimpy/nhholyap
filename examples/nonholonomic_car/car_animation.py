@@ -39,6 +39,7 @@ with open("polytope_data.pkl", "rb") as f:
 # Function to compute a control gain for a given A and B list
 def compute_control_gain(A_list, B_list, mu, x_init):
     try:
+        # print(A_list)
         return find_lyapunov_and_gain_polytope(
             A_list=A_list, B_list=B_list, mu=mu,
             x0=x_init.reshape((4,1)), solver_verbose=False, print_constraint=False
@@ -77,6 +78,7 @@ def find_gains_recursively(A_ldi_list, B_ldi_list, mu, x_init, start_idx=0, end_
         print(f"Failed to synthesize control gain from {start_idx} to {end_idx}.")
         print("A_LDI:")
         print(A_ldi_union)
+        pass
 
     # If no gain found and only one element left, return failure
     if end_idx - start_idx <= 1:

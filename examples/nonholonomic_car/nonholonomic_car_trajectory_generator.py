@@ -143,8 +143,8 @@ def plot_trajectory(trajectory, time_states, u_opt, time_controls):
 
 # Main script
 if __name__ == "__main__":
-    stateA = [0.0, 0.0, 0.0, 1.0]  # Initial state: [x, y, phi, v]
-    stateB = [5.0, 0.0, np.pi / 4, 1.0]  # Target state: [x, y, phi, v]
+    stateA = [0.0, 0.0, 0.0, 0.0]  # Initial state: [x, y, phi, v]
+    stateB = [5.0, 5.0, np.pi / 4, 0.0]  # Target state: [x, y, phi, v]
     t_span = 10.0  # Total time
     dt = 0.1  # Time step
     car_length = 1.0  # Length of the car
