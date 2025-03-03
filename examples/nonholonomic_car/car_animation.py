@@ -24,7 +24,7 @@ from functools import reduce
 x_init = np.array([0, 0, 0, 1])  # Initial state: [x, y, phi, v]
 x_des = np.array([5, 0.0, np.pi/4, 1.0])  # Desired state: [x_des, y_des, phi_des, v_des]
 mu = 1  # Bound on the norm of control input
-dt = 0.02  # Time step for integration
+dt = 0.01  # Time step for integration
 stop_threshold = 0.1  # Threshold for stopping condition (distance to desired state)
 car_length = 1.0  # Length of the car
 
@@ -180,7 +180,7 @@ car_traj, = axs[5].plot([], [], '-', color="blue", label="Trajectory")
 # Initialize time and trajectories
 trajectory_time = []
 x_history, y_history = [], []
-NUM_FRAMES = 500
+NUM_FRAMES = 101
 
 def update_car(frame):
     global x_current
@@ -241,9 +241,19 @@ def update_car(frame):
     car_line.set_data([x], [y])
     car_traj.set_data(x_history, y_history)
 
+    print(frame)
+
     # Stop condition
     if np.linalg.norm(x_current - x_des) < stop_threshold or frame > NUM_FRAMES:
-        ani_car.event_source.stop()
+        # ani_car.event_source.stop()
+        plt.clf()
+        for ax in axs:
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.set_frame_on(False)
+        raise Exception("Animation Terminated")
 
     return state_lines + control_lines + [feedback_line, car_line, car_traj]
 
@@ -253,7 +263,7 @@ animation_speed = 10
 interval = dt * 1000 / animation_speed
 
 # Create animation
-ani_car = FuncAnimation(fig, update_car, frames=NUM_FRAMES, interval=interval, blit=True)
+ani_car = FuncAnimation(fig, update_car, frames=NUM_FRAMES, interval=interval, blit=False)
 
 # Show animation
 plt.tight_layout()
