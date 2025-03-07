@@ -21,7 +21,7 @@ class FaultyNonHolonomicCar(irx.system.OpenLoopSystem):
     ---
     """
 
-    def __init__(self, p) -> None:
+    def __init__(self) -> None:
         # Tells immrax that the system is continuous
         self.evolution = 'continuous'
         # Tells immrax the number of states
@@ -29,16 +29,18 @@ class FaultyNonHolonomicCar(irx.system.OpenLoopSystem):
         self.ulen = 2  #omega, a
         self.wlen = 1  #disturbance
         self.vlen = 3  #noise in output
-        self.p = p # Amount of steering control you have. IDEALLY (?) Between 0 and 1.
+        # self.p = p # Amount of steering control you have. IDEALLY (?) Between 0 and 1. NOTE: treated as an input instead.
+        self.plen = 1
 
-    def f(self, t: float, x: jax.Array, u: jax.Array, w: jax.Array) -> jax.Array:
+    def f(self, t: float, x: jax.Array, u: jax.Array, w: jax.Array, p: jax.Array) -> jax.Array:
         assert x.shape == (self.xlen,), f"Expected x to be of shape ({self.xlen},), got {x.shape}"
         assert u.shape == (self.ulen,), f"Expected u to be of shape ({self.ulen},), got {u.shape}"
         assert w.shape == (self.wlen,), f"Expected w to be of shape ({self.wlen},), got {w.shape}"
+        assert p.shape == (self.plen,), f"Expected p to be of shape ({self.plen},), got {p.shape}"
         return jnp.array([
             x[3] * jnp.cos(x[2]),
             x[3] * jnp.sin(x[2]),
-            self.p * u[0] + w[0],
+            p[0] * u[0] + w[0],
             u[1] + w[1],
         ])
     
