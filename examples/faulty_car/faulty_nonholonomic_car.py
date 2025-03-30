@@ -6,7 +6,7 @@ import numpy as np
 import sys
 import os
 
-class FaultyNonHolonomicCar(irx.system.OpenLoopSystem):
+class FaultyNonHolonomicCar(irx.system.System):
     p:float
     """
     System Model of a "Faulty" Nonholonomic car.
@@ -29,14 +29,13 @@ class FaultyNonHolonomicCar(irx.system.OpenLoopSystem):
         self.ulen = 2  #omega, a
         self.wlen = 1  #disturbance
         self.vlen = 3  #noise in output
-        # self.p = p # Amount of steering control you have. IDEALLY (?) Between 0 and 1. NOTE: treated as an input instead.
         self.plen = 1
 
     def f(self, t: float, x: jax.Array, u: jax.Array, w: jax.Array, p: jax.Array) -> jax.Array:
-        assert x.shape == (self.xlen,), f"Expected x to be of shape ({self.xlen},), got {x.shape}"
-        assert u.shape == (self.ulen,), f"Expected u to be of shape ({self.ulen},), got {u.shape}"
-        assert w.shape == (self.wlen,), f"Expected w to be of shape ({self.wlen},), got {w.shape}"
-        assert p.shape == (self.plen,), f"Expected p to be of shape ({self.plen},), got {p.shape}"
+        # assert x.shape == (self.xlen,), f"Expected x to be of shape ({self.xlen},), got {x.shape}"
+        # assert u.shape == (self.ulen,), f"Expected u to be of shape ({self.ulen},), got {u.shape}"
+        # assert w.shape == (self.wlen,), f"Expected w to be of shape ({self.wlen},), got {w.shape}"
+        # assert p.shape == (self.plen,), f"Expected p to be of shape ({self.plen},), got {p.shape}"
         return jnp.array([
             x[3] * jnp.cos(x[2]),
             x[3] * jnp.sin(x[2]),
