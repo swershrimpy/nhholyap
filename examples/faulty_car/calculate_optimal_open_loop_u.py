@@ -8,6 +8,7 @@ from scipy.optimize import minimize
 import immrax as irx 
 from faulty_nonholonomic_car import FaultyNonHolonomicCar
 from interval_functions import overlap_size_lax, propagate_interval_euler
+from visualization_functions import visualize_trajectory_given_u_K
 
 @partial(jit, static_argnums=(1, 2, 3, 4, 5, 6))
 def loss_ff(u_ol, x_interval, dt, system, p_nominal, p_actuator_fault, num_steps=10):
@@ -99,11 +100,34 @@ def calculate_optimal_open_loop_u(x_interval, p_nominal, p_actuator_fault, obser
         print(f"Message: {result_grad.message}")
     return optimal_u_ol, result_grad 
 
-calculate_optimal_open_loop_u(
+optimal_u, result_struct = calculate_optimal_open_loop_u(
     x_interval=irx.interval(jnp.array([0., 0., 0., 0.]), jnp.array([0.2, 0.2, 0.2, 0.2])),
     p_nominal = irx.icentpert(jnp.array([1.]), jnp.array([0.])), # Assuming valid interval
     p_actuator_fault = irx.icentpert(jnp.array([0.25]), jnp.array([0.25])),
-    observer_offset=jnp.ones(4) * 0.,  # Offset for the observer
+    observer_offset=jnp.ones(4) * 0.2,  # Offset for the observer
     dt=.10,
     num_steps=10
+)
+
+# A running example.
+# Example fixed arguments (assuming your setup)
+x_interval_example = irx.interval(jnp.array([0., 0., 0., 0.]), jnp.array([0.2, 0.2, 0.2, 0.2]))
+dt = 0.1 # Using a float for dt
+num_steps = 10
+p_nominal = irx.icentpert(jnp.array([1.]), jnp.array([0.])) # Assuming valid interval
+p_actuator_fault = irx.icentpert(jnp.array([0.25]), jnp.array([0.25]))
+observer_offset = jnp.ones(4) * 0.2  # Offset for the observer
+learning_rate = 0.2  # Learning rate for the cost function
+ivl_size_weight = 1.0  # Weight for interval size in the cost function
+
+visualize_trajectory_given_u_K(
+    x0_interval=x_interval_example,
+    u_ol=optimal_u,
+    K=jnp.zeros((2, 2)),  # no feedback control for this example
+    dt=dt,
+    w_interval=irx.icentpert(jnp.array([0., 0.]), jnp.zeros(2)),  # Assuming no disturbance
+    p_no_disturbance=p_nominal,  # Assuming no disturbance parameters
+    p_actuator_fault=p_actuator_fault,
+    observer_offset=observer_offset,  # Offset for the observer
+    max_iter=10,
 )

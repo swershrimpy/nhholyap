@@ -93,3 +93,9 @@ def propagate_with_feedback(x_interval, u_ol, K, dt, faulty_system, w_if, p_ivl)
         irx.natemb(faulty_system), x_interval, irx.icentpert(u, jnp.zeros_like(u)), w_if, p_ivl, dt
     )
     return x_interval_propagated
+
+def observation_interval_size(x_interval):
+    """Compute the size of the observation interval (sum of interval widths)."""
+    # x_interval is assumed to be a 2D array where each row is [lower, upper] for a state variable.
+    widths = x_interval.upper - x_interval.lower
+    return jnp.prod(widths)
