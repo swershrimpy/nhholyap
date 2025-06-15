@@ -2,6 +2,7 @@ import immrax as irx
 import jax
 import jax.numpy as jnp
 import jax.lax as lax
+from typing import Union
 
 def overlap_size(interval1, interval2):
     # Compute the intersection lower and upper bounds
@@ -48,3 +49,47 @@ def overlap_size_lax(interval1, interval2):
         no_overlap,                     # Function to run if False
         (intersection_lower, intersection_upper) # Operands to pass to the chosen function
     )
+
+def propagate_interval_euler(
+        embedding_system: irx.System, 
+        x0_interval: irx.Interval, 
+        u_interval: Union[jnp.ndarray, irx.Interval], 
+        w_interval: Union[jnp.ndarray, irx.Interval], 
+        p_interval: Union[jnp.ndarray, irx.Interval], 
+        t_end: float
+    ) -> irx.Interval:
+    xt_ut =  embedding_system.f(0., irx.i2ut(x0_interval), u_interval, w_interval, p_interval) * t_end + irx.i2ut(x0_interval)
+    return irx.ut2i(xt_ut)
+
+def propagate_interval(
+        embedding_system: irx.System, 
+        x0_interval: irx.Interval, 
+        u_interval: Union[jnp.ndarray, irx.Interval], 
+        w_interval: Union[jnp.ndarray, irx.Interval], 
+        p_interval: Union[jnp.ndarray, irx.Interval], 
+        t_end: float
+    ) -> irx.Interval:
+    def u_map_in_func(t, x):
+        return u_interval
+    def w_map_in_func(t, x):
+        return w_interval
+    def p_map_in_func(t, x):
+        return p_interval
+    x_traj = embedding_system.compute_trajectory(0.0, t_end, irx.i2ut(x0_interval), (u_map_in_func, w_map_in_func, p_map_in_func))
+    x_emb = x_traj.ys[-1]
+    x_ivl = irx.Interval(lower=x_emb[:4], upper=x_emb[4:])
+    return x_ivl
+
+def propagate_with_feedback(x_interval, u_ol, K, dt, faulty_system, w_if, p_ivl):
+    """Propagate the state interval under feedback control u = Kx."""
+    # Assuming x_interval is a 4D state (lower and upper bounds for each state variable)
+    # and K is a 2x4 matrix (since u is 2D and x is 4D).
+    # For simplicity, we'll approximate the propagation of the interval under u = Kx.
+    # This is a placeholder; you may need a more rigorous interval propagation method.
+    x_center = (x_interval.lower + x_interval.upper) / 2
+    u = u_ol +jnp.array([0., 1.]) + K @ x_center[:2]  # Feedback control
+    # w_if = irx.icentpert(jnp.array([0, 0]), jnp.zeros(2))  # Assuming no steady-state disturbance on input for simplicity
+    x_interval_propagated = propagate_interval_euler(
+        irx.natemb(faulty_system), x_interval, irx.icentpert(u, jnp.zeros_like(u)), w_if, p_ivl, dt
+    )
+    return x_interval_propagated

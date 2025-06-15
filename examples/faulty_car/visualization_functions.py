@@ -42,7 +42,7 @@ def propagate_interval_euler(
     xt_ut =  embedding_system.f(0., irx.i2ut(x0_interval), u_interval, w_interval, p_interval) * t_end + irx.i2ut(x0_interval)
     return irx.ut2i(xt_ut)
 
-def plot_observation_boxes(x_interval_actuator_fault, x_interval_no_fault, x_interval_observation_fault, starting_observation, new_observation_interval=None, new_observation=None):
+def plot_observation_boxes(x_interval_actuator_fault, x_interval_no_fault, x_interval_observation_fault, starting_observation, new_observation_interval=None, new_observation=None, t=1):
     # Extract the x and y positions from the final interval
     x_pos_interval_actuator_fault = x_interval_actuator_fault[0]  # x position interval
     y_pos_interval_actuator_fault = x_interval_actuator_fault[1]  # y position interval
@@ -98,7 +98,7 @@ def plot_observation_boxes(x_interval_actuator_fault, x_interval_no_fault, x_int
         pass
     plt.xlabel("x position")
     plt.ylabel("y position")
-    plt.title("Observation of x and y Positions after 1 Second")
+    plt.title(f"Observation of x and y Positions After {t} seconds")
     plt.legend()
     plt.grid()
     plt.show()
@@ -180,8 +180,9 @@ def visualize_trajectory_given_u_K(x0_interval, u_ol, K, w_interval, p_no_distur
             x_interval_actuator_fault=x_interval_actuator_fault, 
             x_interval_observation_fault=x_interval_observer_fault,
             starting_observation=previous_observation_interval,
-            new_observation_interval=measurement_interval,
-            new_observation=x_actual[0:2]
+            # new_observation_interval=measurement_interval,
+            # new_observation=x_actual[0:2]
+            t=t
         )
 
         # Update state interval

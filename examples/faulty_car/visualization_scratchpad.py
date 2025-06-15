@@ -26,10 +26,10 @@ p_no_disturbance = irx.icentpert(jnp.array([1]), jnp.array([.0]))
 # )
 
 visualize_trajectory_given_u_K(
-    x0_interval=irx.interval(jnp.array([0., 0., 0., 0.]), jnp.array([0.02, 0.02, 0.02, 0.02])),
-    u_ol=jnp.array([-0.38392818, -0.92336296]),
+    x0_interval=irx.icentpert(jnp.array([0., 0., 0., 0.]), jnp.array([0.2, 0.2, 0.2, 0.2])),
+    u_ol=jnp.array([-9.99134655e-01, -8.87123272e-04]),
     K=jnp.zeros_like(K),
-    dt=1.0,
+    dt=.10,
     w_interval=w_interval,
     p_no_disturbance=p_no_disturbance,
     p_actuator_fault=p_interval,
