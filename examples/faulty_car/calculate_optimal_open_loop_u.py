@@ -4,13 +4,13 @@ from functools import partial
 import copy
 import jax.numpy as jnp
 import numpy as np  
-from scipy.optimize import minimize
+from jaxopt import LBFGSB
 import immrax as irx 
 from faulty_nonholonomic_car import FaultyNonHolonomicCar
 from interval_functions import overlap_size_lax, propagate_interval_euler
 from visualization_functions import visualize_trajectory_given_u_K
 import timeit, time
-import jaxopt
+import jaxopt, varipeps
 system = FaultyNonHolonomicCar()
 natemb_system = irx.natemb(system)
 w_ivl = irx.icentpert(jnp.array([0, 0]), jnp.zeros(2))
@@ -37,10 +37,10 @@ def jax_objective_ff(u, x_interval, dt, p_nominal, p_actuator_fault, num_steps):
 # NEW, CORRECTED BLOCK:
 # Tell JIT to treat arguments 1 through 7 as static constants.
 # It will only trace argument 0 ('params').
-value_and_grad_fn_ff = jax.jit(
-    jax.value_and_grad(jax_objective_ff, argnums=0),
-    static_argnums=(2, 3, 4, 5)  # <<< CORRECTED static_argnums
-)
+value_and_grad_fn_ff = jax.value_and_grad(jax_objective_ff, argnums=0)           #jax.jit(
+    
+#     static_argnums=(2, 3, 4, 5)  # <<< CORRECTED static_argnums
+# )
 
 
 # The final wrapper for SciPy now calls this JAX function
@@ -50,8 +50,16 @@ def scipy_wrapper_with_grad_ff(params, *args):
     value, grad = value_and_grad_fn_ff(params, *args)
     # SciPy optimizers work with float64 by default, so ensure type compatibility.
     # It's safer to return standard numpy arrays.
-    return np.float64(value), np.float64(grad) # <<< CHANGED to np.float64
+    return value, grad # <<< CHANGED to np.float64
 
+
+jaxscipy = jaxopt.ScipyMinimize(
+    fun=scipy_wrapper_with_grad_ff,
+    method='L-BFGS-B',
+    maxiter=100,
+    tol=1e-6,
+    options={'disp': True}
+)
 
 loss_grad = jax.grad(loss_ff, argnums=0)
 
@@ -63,63 +71,29 @@ def calculate_optimal_open_loop_u(x_interval, p_nominal, p_actuator_fault, obser
     Args:
         x_interval (irx.Interval): The initial state interval.
         """
-    # initial_params = np.zeros(2)  # Example: 2D control input
-    # Example fixed arguments (assuming your setup)
-    # x_interval = irx.interval(jnp.array([0., 0., 0., 0.]), jnp.array([0.2, 0.2, 0.2, 0.2]))
-    # dt = .10 # Using a float for dt
-    # num_steps = 10
-    
-
-    # Assume normal_car_embedding_system is defined
-    # from your_file import normal_car_embedding_system
-
-    # fixed_args = (x_interval,
-    #             dt,
-    #             p_nominal,
-    #             p_actuator_fault,
-    #             num_steps
-    #             )
-
     print("\nStarting gradient-based optimization with JAX...")
-    # Use a method that can leverage gradients, like 'BFGS' or 'L-BFGS-B'
-    # Tell SciPy that our function returns the jacobian (gradient) by setting jac=True
-    # result_grad = jaxopt.
-    
-    lr = 1e-5
-    steps = 10
+
+
+    # lr = 1e-1
+    # steps = 10
     u_opt = jnp.zeros(2)  # Initial guess for the open-loop control input
+    loss_lam = lambda u: loss_ff(u, x_interval, dt, p_nominal, p_actuator_fault, num_steps)
+    lbfgsb_solver = jaxopt.LBFGSB(
+        fun=loss_lam,
+        verbose=True,
+        # static_argnums=(2, 3, 4, 5)
+    )
+    u_opt = lbfgsb_solver.run(
+        u_opt, 
+        bounds=(jnp.array([-1., -1.]), jnp.array([1., 1.])),  # Assuming control input bounds
+        ).params
 
-    for i in range(steps):
-        grad = loss_grad(u_opt, x_interval, dt, p_nominal, p_actuator_fault, num_steps)
-        u_opt -= lr * grad
-        # if loss_ff(u_opt, x_interval, dt, p_nominal, p_actuator_fault, num_steps) == 0.0:
-        #     print(f"Converged after {i+1} steps.")
-        #     break
-    # minimize(
-    #     scipy_wrapper_with_grad_ff,
-    #     initial_params,
-    #     args=fixed_args,
-    #     method='L-BFGS-B',
-    #     jac=True,  # <<< IMPORTANT! UNCOMMENTED THIS LINE
-    #     options={'disp': True} # <<< UNCOMMENTED to see optimizer progress
-    # )
-    return u_opt#, None  # Return the optimal control input and a placeholder for the result structure
-    # Extract and display the results
-    # if result_grad.success:
-    #     print("\nGradient-based optimization successful!")
-    #     optimal_params = result_grad.x
-    #     optimal_u_ol = optimal_params[0:2]
-    #     # optimal_K = optimal_params[2:].reshape((2, 2))
-    #     print(f"Optimal u_ol:\n{optimal_u_ol}")
-    #     # print(f"Optimal K:\n{optimal_K}")
-    #     print(f"Minimum loss value: {result_grad.fun}")
-    # else:
-    #     print("\nGradient-based optimization failed.")
-    #     print(f"Message: {result_grad.message}")
-    # return optimal_u_ol, result_grad 
+    # for i in range(steps):
+    #     grad = loss_grad(u_opt, x_interval, dt, p_nominal, p_actuator_fault, num_steps)
+    #     u_opt -= lr * grad
 
-# Call the function to calculate the optimal open-loop control input
-# This will run the optimization and return the optimal control input.
+
+    return u_opt
 
 jit_calculate_optimal_open_loop_u = jit(partial(calculate_optimal_open_loop_u, 
     # x_interval=irx.interval(jnp.array([0., 0., 0., 0.]), jnp.array([0.2, 0.2, 0.2, 0.2])),
