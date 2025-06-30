@@ -63,22 +63,22 @@ def calculate_optimal_open_loop_u(x_interval, p_nominal, p_actuator_fault, obser
         # Hyperparameters for the gradient descent
         learning_rate = 1e-2
         num_gd_steps = 10
-
+        subkey, prng_key = jax.random.split(prng_key)
         # Initialize control input `u` with a random guess
-        u_initial = jax.random.uniform(prng_key, shape=(2,), minval=-2.0, maxval=2.0)
+        u_initial = jax.random.uniform(subkey, shape=(2,), minval=-2.0, maxval=2.0)
 
         # Define the body of the gradient descent loop
-        def gradient_step(i, u_current):
-            grad = loss_grad(u_current, x_interval, dt, p_nominal, p_actuator_fault, observer_offset, num_steps)
-            return u_current - learning_rate * grad
+        # def gradient_step(i, u_current):
+        #     grad = loss_grad(u_current, x_interval, dt, p_nominal, p_actuator_fault, observer_offset, num_steps)
+        #     return u_current - learning_rate * grad
         
 
-        # Use fori_loop for the gradient descent steps. This is crucial for JIT-compilation.
-        u_opt = jax.lax.fori_loop(0, num_gd_steps, gradient_step, u_initial)
-        return u_opt
+        # # Use fori_loop for the gradient descent steps. This is crucial for JIT-compilation.
+        # u_opt = jax.lax.fori_loop(0, num_gd_steps, gradient_step, u_initial)
+        return u_initial#u_opt
 
     # --- Main optimization logic ---
-    num_parallel_runs = 100
+    num_parallel_runs = 1000
     master_key = jax.random.PRNGKey(42)
     batched_keys = jax.random.split(master_key, num_parallel_runs)
 
