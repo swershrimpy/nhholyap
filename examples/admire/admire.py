@@ -56,12 +56,30 @@ def Admire(irx.system.System):
         drc_in, dlc_in, droe_in, drie_in, dlie_in, dloe_in, dr_in. dle_in, ldg_in, tss_in, dty_in, dtz_in, u_dist, v_dist, w_dist, p_dist = u[:15]
         # TODO: Unpack disturbance
         # Calculate Derivatives 
-        """
-        uderiv =  rb_st*vbody-qb_st*wbody-grav*sin(theta_st)+(Fx+Tx)/(mass*(1+dmass));
-        vderiv = -rb_st*ubody+pb_st*wbody+grav*sin(phi_st)*cos(theta_st)+(Fy+Ty)/(mass*(1+dmass));
-        wderiv =  qb_st*ubody-pb_st*vbody+grav*cos(phi_st)*cos(theta_st)+(Fz+Tz)/(mass*(1+dmass));
-        """
-        vtd = (ub * ubd + vb * vbd +)
+        ubody = Vt_st * jnp.cos(alpha_st) * jnp.cos(beta_st)
+        vbody = Vt_st * jnp.sin(beta_st)
+        wbody = Vt_st * jnp.sin(alpha_st) * jnp.cos(beta_st)
+        h_geo = z_st
+        # alpha = jnp.atan((wbody) / (ubody)) 
+        # Disturbed Beta
+
+        # Calculate forces
+        if (h_geo<=11000):
+            T_atm = 288.15-0.0065*h_geo
+            p_atm = 101325*jnp.pow((T_atm/288.15),9.81/(287*0.0065))
+         
+        else:
+            T_atm = 216.65
+            p_atm = 22632*exp(-9.81*(h_geo-11000)/(287*216.65))
+        rho	   = p_atm/(287*T_atm);
+        qa	   = 0.5*rho*Vt_st**2
+        Fx = -qa*Sref*Cttot
+        Fy = -qa*Sref*Cctot
+        Fz = -qa*Sref*Cntot
+
+        uderiv =  rb_st*vbody-qb_st*wbody-grav*sin(theta_st)+(Fx+Tx)/(mass*(1+dmass))
+        vderiv = -rb_st*ubody+pb_st*wbody+grav*sin(phi_st)*cos(theta_st)+(Fy+Ty)/(mass*(1+dmass))
+        wderiv =  qb_st*ubody-pb_st*vbody+grav*cos(phi_st)*cos(theta_st)+(Fz+Tz)/(mass*(1+dmass))
 
 
 
