@@ -84,7 +84,7 @@ class AdmireNineDoFLinAct(irx.system.System):
                     
 
 
-    def f(self, t: float, x: jax.Array, u: jax.Array, w: jax.Array, p: jax.Array) -> jax.Array:
+    def f(self, t: float, x: jax.Array, u: jax.Array) -> jax.Array:
         # assert x.shape == (self.xlen,), f"Expected x to be of shape ({self.xlen},), got {x.shape}"
         # assert u.shape == (self.ulen,), f"Expected u to be of shape ({self.ulen},), got {u.shape}"
         # assert w.shape == (self.wlen,), f"Expected w to be of shape ({self.wlen},), got {w.shape}"
@@ -128,14 +128,21 @@ class AdmireNineDoFLinAct(irx.system.System):
 
         return internal_dynamics + actuator_dynamics 
     
-    def h(self, t: float, x: jax.Array, v: jax.Array) -> jax.Array:
+    def g(self, t: float, x: jax.Array, v: jax.Array) -> jax.Array:
         """
-        Definition of Observer.
-        y = Cx + v
-        Only px, py and steering angle can be observed.
+        Definition of Output.
         """
-        return jnp.array([
-            x[0] + v[0],
-            x[1] + v[1], 
-            x[2] + v[2],
-        ])
+        Vt_st, alpha_st, beta_st, pb_st, qb_st, rb_st, psi_st, theta_st, phi_st = x[:9]
+        
+        ubody = Vt_st * jnp.cos(alpha_st) * jnp.cos(beta_st)
+        vbody = Vt_st * jnp.sin(beta_st)
+        wbody = Vt_st * jnp.sin(alpha_st) * jnp.cos(beta_st)
+        uv = jnp.cos(phi_st) * jnp.cos(psi_st) * ubody + \
+            (jnp.sin(phi_st) * jnp.sin(theta_st) * jnp.cos(psi_st) - jnp.cos(phi_st) * jnp.sin(psi_st)) * vbody + \
+            (jnp.cos(phi_st) * jnp.sin(theta_st) * jnp.cos(psi_st) + jnp.sin(phi_st) * jnp.sin(psi_st)) * wbody
+        vv = jnp.cos(phi_st) * jnp.sin(psi_st) * ubody + \
+            (jnp.sin(phi_st) * jnp.sin(theta_st) * jnp.sin(psi_st) + jnp.cos(phi_st) * jnp.cos(psi_st)) * vbody + \
+            (jnp.cos(phi_st) * jnp.sin(theta_st) * jnp.sin(psi_st) - jnp.sin(phi_st) * jnp.cos(psi_st)) * wbody
+        wv = -jnp.sin(theta_st) * ubody + jnp.sin(phi_st) * jnp.cos(theta_st) * vbody + jnp.cos(phi_st) * jnp.cos(theta_st) * wbody
+        return jnp.concatenate(x, jnp.array([uv, vv, wv, pb_st, qb_st, rb_st])) + v
+        
