@@ -16,7 +16,7 @@ class AdmireNineDoFLinAct(irx.system.System):
         self.evolution = 'continuous'
         # Tells immrax the number of states
         self.xlen = 9  #vt, alpha, beta, pb, qb, rb, psi, theta, phi, xv, yv, zv, ub, vb, wb
-        self.ulen = 9  #cc, cl, cm, cn, fx, fy, my
+        self.ulen = 10  #cc, cl, cm, cn, fx, fy, my
         # self.wlen = 1  #disturbance
         # self.vlen = 3  #noise in output
         # self.plen = 1
@@ -84,7 +84,7 @@ class AdmireNineDoFLinAct(irx.system.System):
                     
 
 
-    def f(self, t: float, x: jax.Array, u: jax.Array) -> jax.Array:
+    def f(self, t: float, x: jax.Array, u: jax.Array, p: jax.Array) -> jax.Array:
         # assert x.shape == (self.xlen,), f"Expected x to be of shape ({self.xlen},), got {x.shape}"
         # assert u.shape == (self.ulen,), f"Expected u to be of shape ({self.ulen},), got {u.shape}"
         # assert w.shape == (self.wlen,), f"Expected w to be of shape ({self.wlen},), got {w.shape}"
@@ -124,7 +124,7 @@ class AdmireNineDoFLinAct(irx.system.System):
             phi_der
         ])
 
-        actuator_dynamics = self.B_bar @ u[:self.ulen]  # Assuming B is defined in the system
+        actuator_dynamics = self.B_bar @ (jnp.diag(p) @ u[:self.ulen])  # Assuming B is defined in the system
 
         return internal_dynamics + actuator_dynamics 
     
