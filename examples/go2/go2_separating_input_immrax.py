@@ -18,6 +18,7 @@ Go2 scenario layout from go2_separating_input_demo.ipynb.
 """
 
 import sys
+import os
 from pathlib import Path
 
 # File is at examples/go2/<name>.py  →  parents[1] = examples/
@@ -26,6 +27,7 @@ if str(_EXAMPLES_DIR) not in sys.path:
     sys.path.insert(0, str(_EXAMPLES_DIR))
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import jax
 import jax.numpy as jnp
 import immrax as irx
@@ -63,9 +65,9 @@ class Go2NomActSystem(irx.System):
         alpha = p[0]
         theta = x[2]
         return jnp.array([
-            vx * jnp.cos(theta) - vy * jnp.sin(theta),
-            vx * jnp.sin(theta) + vy * jnp.cos(theta),
-            alpha * omega,
+            vx * jnp.cos(theta) - alpha * vy * jnp.sin(theta),
+            vx * jnp.sin(theta) + alpha * vy * jnp.cos(theta),
+            omega,
         ])
 
 
@@ -94,12 +96,14 @@ class Go2SensorFaultSystem(irx.System):
 
     def f(self, t, x, u, p):
         vx       = u[0]
+        vy       = u[1]
         vy_noise = p[0]   # override commanded vy with the (faulty) sensor reading
         omega    = u[2]
         theta    = x[2]
+        vy_corrupted = (1 - omega ** 2) * vy + omega ** 2 * vy_noise 
         return jnp.array([
-            vx * jnp.cos(theta) - vy_noise * jnp.sin(theta),
-            vx * jnp.sin(theta) + vy_noise * jnp.cos(theta),
+            vx * jnp.cos(theta) - vy_corrupted * jnp.sin(theta),
+            vx * jnp.sin(theta) + vy_corrupted * jnp.cos(theta),
             omega,
         ])
 
@@ -353,10 +357,99 @@ def optimize_multistart(opt: 'SeparatingInputOptimizer',
             best_loss, best_u, best_stats = loss, u_opt, stats
             if verbose:
                 print(f"  → New best: {loss:.6f}")
+        if loss == 0:
+            break
 
     best_stats['restart_times_s'] = restart_times
     return best_u, best_loss, best_stats
 
+
+def optimize_parallel(
+    opt: 'SeparatingInputOptimizer',
+    num_restarts: int = 100,
+    learning_rate: float = 0.01,
+    num_iters: int = 150,
+    max_workers: Optional[int] = None,
+    verbose: bool = False,
+    seed: int = 42,
+) -> Tuple[jnp.ndarray, float, Dict]:
+    """Parallel multi-start gradient descent using a pre-built optimizer.
+
+    Same API/outputs as optimize_multistart, but evaluates restarts in parallel.
+    Returns (best_u, best_loss, best_stats), where best_stats includes:
+      - restart_times_s: per-restart elapsed seconds (index-aligned)
+    """
+    if num_restarts <= 0:
+        raise ValueError("num_restarts must be >= 1")
+
+    # Deterministic restart seeds.
+    subkeys = jax.random.split(jax.random.PRNGKey(seed), num_restarts)
+
+    # Trigger JIT compilation once on caller thread to avoid compile races.
+    _u_warm = jnp.array([0.5, 0.0, 0.3])
+    _ = opt.loss_fn(_u_warm)
+    _ = opt.grad_fn(_u_warm)
+
+    if max_workers is None:
+        max_workers = min(num_restarts, max(1, (os.cpu_count() or 1)))
+    else:
+        max_workers = max(1, min(max_workers, num_restarts))
+
+    restart_times: List[float] = [0.0] * num_restarts
+    best_u, best_loss, best_stats = None, float("inf"), None
+
+    def _run_one(restart_idx: int):
+        key = subkeys[restart_idx]
+        u_init = (jax.random.normal(key, (3,)) * 0.3
+                  + jnp.array([0.5, 0.0, 0.3]))
+        t0 = time.perf_counter()
+        u_opt, loss = opt.optimize(u_init, learning_rate, num_iters, verbose=False)
+        elapsed = time.perf_counter() - t0
+        stats = opt.evaluate(u_opt)
+        return restart_idx, u_opt, float(loss), stats, elapsed
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_run_one, r): r
+            for r in range(num_restarts)
+        }
+
+        for fut in as_completed(futures):
+            r, u_opt, loss, stats, elapsed = fut.result()
+            restart_times[r] = elapsed
+
+            if verbose:
+                print(f"Restart {r+1}/{num_restarts}: loss={loss:.6f} time={elapsed:.3f}s")
+
+            if loss < best_loss:
+                best_u, best_loss, best_stats = u_opt, loss, stats
+                if verbose:
+                    print(f"  -> New best from restart {r+1}: {best_loss:.6f}")
+
+    best_stats['restart_times_s'] = restart_times
+    return best_u, best_loss, best_stats
+
+
+def optimize_parallel_gpu(opt, num_restarts=100, learning_rate=0.01, num_iters=150, seed=42):
+    key = jax.random.PRNGKey(seed)
+    u0 = jax.random.normal(key, (num_restarts, 3)) * 0.3 + jnp.array([0.5, 0.0, 0.3])
+
+    # Vectorize loss/grad across restart axis.
+    batched_loss = jax.vmap(opt.loss_fn)             # (R,3) -> (R,)
+    batched_grad = jax.vmap(opt.grad_fn)             # (R,3) -> (R,3)
+
+    def body(_, u):
+        g = batched_grad(u)
+        return u - learning_rate * g
+
+    # One compiled loop on device.
+    u_final = jax.lax.fori_loop(0, num_iters, body, u0)
+    losses = batched_loss(u_final)
+
+    best_idx = jnp.argmin(losses)
+    best_u = u_final[best_idx]
+    best_loss = losses[best_idx]
+    return best_u, best_loss, u_final, losses
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 6.  Main
