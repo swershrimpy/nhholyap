@@ -131,7 +131,7 @@ _SF_EMB = irx.natemb(_SF_SYS)
 def create_scenarios(
     actuator_alpha_lo: float = 0.60,
     actuator_alpha_hi: float = 0.80,
-    sensor_noise_bound: float = 0.05,
+    sensor_noise_bound: float = 0.25,
 ) -> List[Scenario]:
     """Return the three fault scenarios used throughout this module.
 
@@ -192,7 +192,7 @@ def euler_step(emb_sys, x_ivl: irx.Interval, u: jnp.ndarray,
 def propagate_scenario(x0_ivl: irx.Interval, u: jnp.ndarray,
                        scenario: Scenario,
                        dt: float, num_steps: int) -> irx.Interval:
-    """Propagate the initial interval *num_steps* Euler steps.
+    """Propagate the initial interval *num_steps* Euler steps under a constant u.
 
     Returns the full 3-D state interval [px, py, θ] at the end of the horizon.
     JAX-compatible (uses lax.fori_loop so the function is JIT-able and
@@ -205,6 +205,42 @@ def propagate_scenario(x0_ivl: irx.Interval, u: jnp.ndarray,
         return euler_step(emb, x_carry, u, p, dt)
 
     return jax.lax.fori_loop(0, num_steps, body, x0_ivl)
+
+
+def _propagate_history(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
+                       emb_sys, p_ivl: irx.Interval,
+                       dt: float, steps_per_segment: int) -> irx.Interval:
+    """Propagate and record the state interval at the end of every segment.
+
+    Returns an irx.Interval whose lower/upper have shape
+    (num_segments, state_dim) — one slice per segment end.
+    Designed to be vmapped over p_ivl to parallelise across scenarios that
+    share the same emb_sys.
+    """
+    def segment(x_ivl, u_k):
+        def euler_body(_, x): return euler_step(emb_sys, x, u_k, p_ivl, dt)
+        x_end = jax.lax.fori_loop(0, steps_per_segment, euler_body, x_ivl)
+        return x_end, x_end   # carry, stacked output
+
+    _, x_hist = jax.lax.scan(segment, x0_ivl, u_seq)
+    return x_hist   # Interval: lower/upper shape (num_segments, state_dim)
+
+
+def propagate_scenario_multistep(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
+                                 scenario: Scenario,
+                                 dt: float, steps_per_segment: int) -> irx.Interval:
+    """Propagate x0_ivl through a sequence of control inputs.
+
+    u_seq has shape (num_segments, 3).  u_seq[k] is held constant for
+    *steps_per_segment* Euler steps, then u_seq[k+1] takes over, etc.
+    Total horizon = num_segments × steps_per_segment × dt seconds.
+    Returns the final state interval only.
+    """
+    x_hist = _propagate_history(
+        x0_ivl, u_seq, scenario.emb_system, scenario.p_interval, dt, steps_per_segment
+    )
+    # x_hist.lower has shape (num_segments, state_dim); take the last row
+    return irx.Interval(lower=x_hist.lower[-1], upper=x_hist.upper[-1])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -248,6 +284,89 @@ def separation_loss(u: jnp.ndarray,
         for j in range(i + 1, n):
             total = total + overlap_size_lax(pos_ivls[i], pos_ivls[j])
     return total
+
+
+def separation_loss_multistep(u_seq: jnp.ndarray,
+                              x0_ivl: irx.Interval,
+                              scenarios: List[Scenario],
+                              dt: float,
+                              steps_per_segment: int) -> jnp.ndarray:
+    """Min over segments of the pairwise position-interval overlap sum.
+
+    For each segment end k, computes the sum of pairwise position-interval
+    overlaps across all scenarios.  Returns the minimum over all K segment
+    ends — i.e., the loss is zero if the scenarios are fully separated at
+    ANY point in the trajectory.
+
+    Scenarios that share the same emb_system are propagated in parallel via
+    jax.vmap over their stacked p_intervals.
+
+    Parameters
+    ----------
+    u_seq            : (num_segments, 3) sequence of control inputs
+    x0_ivl           : initial state interval
+    scenarios        : list of Scenario objects
+    dt               : Euler step size (s)
+    steps_per_segment: Euler steps each control input is held for
+
+    Returns
+    -------
+    Scalar (m²); lower is better.
+    """
+    num_segments = u_seq.shape[0]
+    n = len(scenarios)
+
+    # ── Group scenarios by emb_system identity ────────────────────────────
+    # emb_id -> (emb_sys, [global_indices], [p_ivl])
+    emb_groups: Dict[int, tuple] = {}
+    for idx, s in enumerate(scenarios):
+        eid = id(s.emb_system)
+        if eid not in emb_groups:
+            emb_groups[eid] = (s.emb_system, [], [])
+        emb_groups[eid][1].append(idx)
+        emb_groups[eid][2].append(s.p_interval)
+
+    # ── Propagate each group in parallel (vmap over p_ivl) ───────────────
+    # x_hist_all[i]: Interval with lower/upper shape (num_segments, state_dim)
+    x_hist_all: List[irx.Interval] = [None] * n
+    for emb_sys, indices, p_ivls in emb_groups.values():
+        # Stack p_intervals: Interval with lower/upper shape (B, param_dim)
+        p_batch = irx.Interval(
+            lower=jnp.stack([p.lower for p in p_ivls]),
+            upper=jnp.stack([p.upper for p in p_ivls]),
+        )
+
+        def prop_one(p_ivl_single):
+            return _propagate_history(
+                x0_ivl, u_seq, emb_sys, p_ivl_single, dt, steps_per_segment
+            )
+
+        # x_hist_batch: Interval with lower/upper shape (B, num_segments, state_dim)
+        x_hist_batch = jax.vmap(prop_one)(p_batch)
+
+        for local_i, global_i in enumerate(indices):
+            x_hist_all[global_i] = irx.Interval(
+                lower=x_hist_batch.lower[local_i],
+                upper=x_hist_batch.upper[local_i],
+            )
+
+    # ── Overlap sum at each segment end, then take the minimum ───────────
+    def overlap_at_k(k):
+        pos_ivls_k = [
+            irx.Interval(
+                lower=x_hist_all[i].lower[k, :2],
+                upper=x_hist_all[i].upper[k, :2],
+            )
+            for i in range(n)
+        ]
+        total = jnp.array(0.0)
+        for i in range(n):
+            for j in range(i + 1, n):
+                total = total + overlap_size_lax(pos_ivls_k[i], pos_ivls_k[j])
+        return total
+
+    segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
+    return jnp.min(segment_overlaps)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -317,6 +436,28 @@ class SeparatingInputOptimizer:
             'pairwise_overlaps':  overlaps,
             'volumes':            volumes,
         }
+
+
+class MultistepSequenceOptimizer:
+    """Container for multistep loss/grad callables and sequence shape."""
+
+    def __init__(self, scenarios: List[Scenario], x0_ivl: irx.Interval,
+                 dt: float, steps_per_segment: int, num_segments: int):
+        self.scenarios = scenarios
+        self.x0_ivl = x0_ivl
+        self.dt = dt
+        self.steps_per_segment = steps_per_segment
+        self.num_segments = num_segments
+
+        _loss = partial(
+            separation_loss_multistep,
+            x0_ivl=x0_ivl,
+            scenarios=scenarios,
+            dt=dt,
+            steps_per_segment=steps_per_segment,
+        )
+        self.loss_fn = jax.jit(_loss)            # (S,3) -> scalar
+        self.grad_fn = jax.jit(jax.grad(_loss))  # (S,3) -> (S,3)
 
 
 def optimize_multistart(opt: 'SeparatingInputOptimizer',
@@ -450,6 +591,148 @@ def optimize_parallel_gpu(opt, num_restarts=100, learning_rate=0.01, num_iters=1
     best_u = u_final[best_idx]
     best_loss = losses[best_idx]
     return best_u, best_loss, u_final, losses
+
+
+def optimize_multistep_gpu(
+    opt: 'MultistepSequenceOptimizer',
+    num_restarts: int = 100,
+    learning_rate: float = 0.01,
+    num_iters: int = 150,
+    seed: int = 42,
+):
+    """GPU-parallel multi-start optimization for control sequences.
+
+    Mirrors optimize_multistart_gpu but for u_seq with shape (num_segments, 3).
+    Returns:
+      best_u_seq, best_loss, all_u_seq_final, all_final_losses
+    """
+    key = jax.random.PRNGKey(seed)
+    u0 = (
+        jax.random.normal(key, (num_restarts, opt.num_segments, 3)) * 0.1
+        + jnp.array([0.5, 0.0, 0.3])
+    )
+
+    # Vectorize loss/grad across restart axis.
+    batched_loss = jax.vmap(opt.loss_fn)   # (R,S,3) -> (R,)
+    batched_grad = jax.vmap(opt.grad_fn)   # (R,S,3) -> (R,S,3)
+
+    def body(_, u_batch):
+        g = batched_grad(u_batch)
+        return u_batch - learning_rate * g
+
+    # One compiled loop on device.
+    u_final = jax.lax.fori_loop(0, num_iters, body, u0)
+    losses = batched_loss(u_final)
+
+    best_idx = jnp.argmin(losses)
+    best_u = u_final[best_idx]
+    best_loss = losses[best_idx]
+    return best_u, best_loss, u_final, losses
+
+
+def optimize_multistep(scenarios: List[Scenario],
+                       x0_ivl: irx.Interval,
+                       dt: float,
+                       steps_per_segment: int,
+                       num_segments: int,
+                       learning_rate: float = 0.01,
+                       num_iters: int = 300,
+                       num_restarts: int = 100,
+                       verbose: bool = False,
+                       seed: int = 42,
+                       ) -> Tuple[jnp.ndarray, float, Dict]:
+    """Multi-start gradient descent over a sequence of control inputs.
+
+    Optimises u_seq of shape (num_segments, 3), where u_seq[k] is applied
+    to all scenarios for *steps_per_segment* Euler steps before switching to
+    u_seq[k+1].  Total horizon = num_segments × steps_per_segment × dt s.
+
+    Uses separation_loss_multistep as the objective, which sums pairwise
+    position-interval overlaps at the end of the full horizon.
+    Performs batched multi-start optimisation over *num_restarts* random
+    initial guesses and returns the best sequence.
+
+    Parameters
+    ----------
+    scenarios         : list of Scenario objects
+    x0_ivl            : initial state interval
+    dt                : Euler step size (s)
+    steps_per_segment : number of Euler steps per control segment
+    num_segments      : number of control segments (length of sequence)
+    learning_rate     : gradient descent step size
+    num_iters         : number of gradient steps
+    num_restarts      : number of random initial control sequences
+    verbose           : print loss every 20 iterations
+    seed              : PRNG seed for random initialisation
+
+    Returns
+    -------
+    (u_seq_opt, loss_opt, stats)
+    u_seq_opt : (num_segments, 3) optimal control sequence
+    loss_opt  : final overlap loss (m²)
+    stats     : dict with 'position_intervals', 'pairwise_overlaps',
+                'volumes', 'optimization_time_s', 'best_restart_idx',
+                'all_restart_losses', 'num_restarts'
+    """
+    if num_restarts <= 0:
+        raise ValueError("num_restarts must be >= 1")
+
+    ms_opt = MultistepSequenceOptimizer(
+        scenarios=scenarios,
+        x0_ivl=x0_ivl,
+        dt=dt,
+        steps_per_segment=steps_per_segment,
+        num_segments=num_segments,
+    )
+
+    _t0 = time.perf_counter()
+    u_seq, loss_opt_jax, _, final_losses = optimize_multistep_gpu(
+        opt=ms_opt,
+        num_restarts=num_restarts,
+        learning_rate=learning_rate,
+        num_iters=num_iters,
+        seed=seed,
+    )
+    elapsed = time.perf_counter() - _t0
+
+    best_idx = int(jnp.argmin(final_losses))
+    loss_opt = float(loss_opt_jax)
+
+    if verbose:
+        mean_loss = float(jnp.mean(final_losses))
+        print(
+            f"Multistep GPU multistart complete: best_loss={loss_opt:.6f}  "
+            f"mean_final_loss={mean_loss:.6f}  best_restart={best_idx+1}/{num_restarts}"
+        )
+
+    # Build stats dict (same schema as SeparatingInputOptimizer.evaluate).
+    pos_ivls = [
+        position_interval(
+            propagate_scenario_multistep(x0_ivl, u_seq, s, dt, steps_per_segment)
+        )
+        for s in scenarios
+    ]
+    n = len(scenarios)
+    overlaps = {}
+    for i in range(n):
+        for j in range(i + 1, n):
+            key_ij = f"{scenarios[i].name} vs {scenarios[j].name}"
+            overlaps[key_ij] = float(overlap_size_lax(pos_ivls[i], pos_ivls[j]))
+    volumes = {
+        s.name: float(jnp.prod(iv.upper - iv.lower))
+        for s, iv in zip(scenarios, pos_ivls)
+    }
+    stats = {
+        'position_intervals':  pos_ivls,
+        'pairwise_overlaps':   overlaps,
+        'volumes':             volumes,
+        'optimization_time_s': elapsed,
+        'best_restart_idx':    best_idx,
+        'all_restart_losses':  np.array(final_losses),
+        'num_restarts':        num_restarts,
+    }
+    return u_seq, loss_opt, stats
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 6.  Main
