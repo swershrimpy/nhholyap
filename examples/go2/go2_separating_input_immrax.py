@@ -38,6 +38,19 @@ from dataclasses import dataclass
 
 from faulty_car.interval_functions import overlap_size_lax
 
+# Control input box constraints: vx, vy ∈ [-1, 1]; ω unconstrained.
+_U_LO = jnp.array([-.6, -.6, -.6])
+_U_HI = jnp.array([ .6,  .6,  .6])
+
+
+def _project_u(u: jnp.ndarray) -> jnp.ndarray:
+    """Project a control input (or batch) onto the feasible box.
+
+    Works for any leading batch dimensions — clips only the last axis.
+    vx ∈ [-1, 1], vy ∈ [-1, 1], ω unconstrained.
+    """
+    return jnp.clip(u, _U_LO, _U_HI)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 1.  System Definitions
@@ -48,12 +61,12 @@ class Go2NomActSystem(irx.System):
 
     State   x = [px, py, θ]         (position + heading, m / rad)
     Control u = [vx, vy, ω]         (body-frame velocities + yaw rate)
-    Params  p = [α]                  (actuator effectiveness; α = 1 → nominal)
+    Params  p = [α, beta]                  (actuator effectiveness; α = 1 → nominal)
 
     Dynamics:
-        ṗx = vx·cos θ − vy·sin θ
-        ṗy = vx·sin θ + vy·cos θ
-        θ̇  = α·ω
+        ṗx = vx·cos θ − α·vy·sin θ
+        ṗy = vx·sin θ + α·vy·cos θ
+        θ̇  = beta * ω
     """
 
     def __init__(self):
@@ -63,11 +76,12 @@ class Go2NomActSystem(irx.System):
     def f(self, t, x, u, p):
         vx, vy, omega = u[0], u[1], u[2]
         alpha = p[0]
+        beta = p[1]
         theta = x[2]
         return jnp.array([
             vx * jnp.cos(theta) - alpha * vy * jnp.sin(theta),
             vx * jnp.sin(theta) + alpha * vy * jnp.cos(theta),
-            omega,
+            beta * omega,
         ])
 
 
@@ -83,10 +97,10 @@ class Go2SensorFaultSystem(irx.System):
     Control u = [vx, vy_cmd, ω]     (commanded; vy_cmd is *ignored* here)
     Params  p = [vy_noise]           (vy reading from faulty sensor,
                                       vy_noise ∈ [−ε, +ε])
-
+    vy_corrupted = (1 - omega ** 2) * vy + omega ** 2 * vy_noise
     Dynamics (what the odometry integrates):
-        ṗ̂x = vx·cos θ̂ − vy_noise·sin θ̂
-        ṗ̂y = vx·sin θ̂ + vy_noise·cos θ̂
+        ṗ̂x = vx·cos θ̂ − vy_corrupted·sin θ̂
+        ṗ̂y = vx·sin θ̂ + vy_corrupted·cos θ̂
         θ̂̇  = ω
     """
 
@@ -100,7 +114,7 @@ class Go2SensorFaultSystem(irx.System):
         vy_noise = p[0]   # override commanded vy with the (faulty) sensor reading
         omega    = u[2]
         theta    = x[2]
-        vy_corrupted = (1 - omega ** 2) * vy + omega ** 2 * vy_noise 
+        vy_corrupted = (1 - omega ** 2) * vy + omega ** 2 * vy_noise
         return jnp.array([
             vx * jnp.cos(theta) - vy_corrupted * jnp.sin(theta),
             vx * jnp.sin(theta) + vy_corrupted * jnp.cos(theta),
@@ -131,6 +145,8 @@ _SF_EMB = irx.natemb(_SF_SYS)
 def create_scenarios(
     actuator_alpha_lo: float = 0.60,
     actuator_alpha_hi: float = 0.80,
+    actuator_beta_low: float = 0.60,
+    actuator_beta_high: float = .80,
     sensor_noise_bound: float = 0.25,
 ) -> List[Scenario]:
     """Return the three fault scenarios used throughout this module.
@@ -146,18 +162,18 @@ def create_scenarios(
         Scenario(
             name="Nominal",
             emb_system=_NOM_ACT_EMB,
-            p_interval=irx.icentpert(jnp.array([1.0]), jnp.zeros(1)),
+            p_interval=irx.icentpert(jnp.array([1.0, 1.0]), jnp.zeros(2)),
         ),
         Scenario(
             name="Actuator Fault",
             emb_system=_NOM_ACT_EMB,
             p_interval=irx.Interval(
-                lower=jnp.array([actuator_alpha_lo]),
-                upper=jnp.array([actuator_alpha_hi]),
+                lower=jnp.array([actuator_alpha_lo, actuator_beta_low]),
+                upper=jnp.array([actuator_alpha_hi, actuator_beta_high]),
             ),
         ),
         Scenario(
-            name="Sensor Fault (vy=0+noise)",
+            name="Sensor Fault",
             emb_system=_SF_EMB,
             p_interval=irx.Interval(
                 lower=jnp.array([-sensor_noise_bound]),
@@ -401,7 +417,7 @@ class SeparatingInputOptimizer:
 
         for i in range(num_iters):
             g = self.grad_fn(u)
-            u = u - learning_rate * g
+            u = _project_u(u - learning_rate * g)
 
             if verbose and (i % 20 == 0 or i == num_iters - 1):
                 loss  = float(self.loss_fn(u))
@@ -581,7 +597,7 @@ def optimize_parallel_gpu(opt, num_restarts=100, learning_rate=0.01, num_iters=1
 
     def body(_, u):
         g = batched_grad(u)
-        return u - learning_rate * g
+        return _project_u(u - learning_rate * g)
 
     # One compiled loop on device.
     u_final = jax.lax.fori_loop(0, num_iters, body, u0)
@@ -618,7 +634,7 @@ def optimize_multistep_gpu(
 
     def body(_, u_batch):
         g = batched_grad(u_batch)
-        return u_batch - learning_rate * g
+        return _project_u(u_batch - learning_rate * g)
 
     # One compiled loop on device.
     u_final = jax.lax.fori_loop(0, num_iters, body, u0)
@@ -628,6 +644,31 @@ def optimize_multistep_gpu(
     best_u = u_final[best_idx]
     best_loss = losses[best_idx]
     return best_u, best_loss, u_final, losses
+
+def optimize_multistep_gpu_rejit(
+    x0_ivl: irx.Interval,
+    scenarios: List[Scenario],
+    dt: float,
+    steps_per_segment: int, 
+    num_segments: int,
+    num_restarts: int = 100,
+    learning_rate: float = 0.01,
+    num_iters: int = 150,
+    seed: int = 42,
+):
+    return optimize_multistep_gpu(
+        MultistepSequenceOptimizer(
+            scenarios=scenarios,
+            x0_ivl=x0_ivl,
+            dt=dt,
+            steps_per_segment=steps_per_segment,
+            num_segments=num_segments,
+        ),
+        num_restarts=num_restarts,
+        learning_rate=learning_rate,
+        num_iters=num_iters,
+        seed=seed
+    )
 
 
 def optimize_multistep(scenarios: List[Scenario],
@@ -767,8 +808,9 @@ if __name__ == "__main__":
 
     # ── Run optimization ───────────────────────────────────────────────────
     print("\nRunning multi-start optimization …\n")
+    opt = SeparatingInputOptimizer(scenarios, x0_ivl, dt, num_steps)
     u_opt, loss_opt, stats = optimize_multistart(
-        scenarios, x0_ivl, dt, num_steps,
+        opt,
         num_restarts=3,
         learning_rate=0.01,
         num_iters=150,
