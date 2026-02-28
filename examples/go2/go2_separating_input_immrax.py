@@ -608,6 +608,31 @@ def optimize_parallel_gpu(opt, num_restarts=100, learning_rate=0.01, num_iters=1
     best_loss = losses[best_idx]
     return best_u, best_loss, u_final, losses
 
+def optimize_parallel_gpu_rejit(
+    x0_ivl: irx.Interval,
+    scenarios: List[Scenario],
+    dt: float,
+    num_steps: int,
+    num_restarts: int = 100,
+    learning_rate: float = 0.01,
+    num_iters: int = 150,
+    seed: int = 42,
+):
+    """
+    Revised version of GPU-parallel multistart optimization for a single controller.
+    """
+    return optimize_parallel_gpu(
+        SeparatingInputOptimizer(
+            scenarios=scenarios, 
+            x0_ivl=x0_ivl,
+            dt=dt,
+            num_steps=num_steps,
+        ),
+        num_restarts=num_restarts,
+        learning_rate=learning_rate,
+        num_iters=num_iters,
+        seed=seed,
+    )
 
 def optimize_multistep_gpu(
     opt: 'MultistepSequenceOptimizer',
