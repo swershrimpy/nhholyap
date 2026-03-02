@@ -275,10 +275,10 @@ def propagate_scenario(x0_int: Interval, u: jnp.ndarray,
         #   Forward: vx_eff ∈ [-vx + b_l, -vx + b_u]
         #   Lateral: vy_eff = -vy  (scalar, same negation, no separate bias)
         vx_eff_int = Interval(
-            lower=jnp.array([-vx + scenario.v_bias_range[0]]),
-            upper=jnp.array([-vx + scenario.v_bias_range[1]]),
+            lower=jnp.array([vx + scenario.v_bias_range[0]]),
+            upper=jnp.array([vx + scenario.v_bias_range[1]]),
         )
-        vy_eff = -vy
+        vy_eff = 0.
 
         # Effective measured yaw rate: ω_meas = ω_true + bias_ω
         omega_eff_int = Interval(

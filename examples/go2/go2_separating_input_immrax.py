@@ -97,11 +97,11 @@ class Go2SensorFaultSystem(irx.System):
     Control u = [vx, vy_cmd, ω]     (commanded; vy_cmd is *ignored* here)
     Params  p = [vy_noise]           (vy reading from faulty sensor,
                                       vy_noise ∈ [−ε, +ε])
-    vy_corrupted = (1 - omega ** 2) * vy + omega ** 2 * vy_noise
+    vy_corrupted = (1 - omega ** 2) * alpha * vy + omega ** 2 * vy_noise
     Dynamics (what the odometry integrates):
         ṗ̂x = vx·cos θ̂ − vy_corrupted·sin θ̂
         ṗ̂y = vx·sin θ̂ + vy_corrupted·cos θ̂
-        θ̂̇  = ω
+        θ̂̇  = beta * ω
     """
 
     def __init__(self):
@@ -112,13 +112,15 @@ class Go2SensorFaultSystem(irx.System):
         vx       = u[0]
         vy       = u[1]
         vy_noise = p[0]   # override commanded vy with the (faulty) sensor reading
+        alpha = p[1]
+        beta = p[2]
         omega    = u[2]
         theta    = x[2]
-        vy_corrupted = (1 - omega ** 2) * vy + omega ** 2 * vy_noise
+        vy_corrupted = (1 - omega ** 2) * alpha * vy + omega ** 2 * vy_noise
         return jnp.array([
             vx * jnp.cos(theta) - vy_corrupted * jnp.sin(theta),
             vx * jnp.sin(theta) + vy_corrupted * jnp.cos(theta),
-            omega,
+            beta * omega,
         ])
 
 
@@ -176,10 +178,18 @@ def create_scenarios(
             name="Sensor Fault",
             emb_system=_SF_EMB,
             p_interval=irx.Interval(
-                lower=jnp.array([-sensor_noise_bound]),
-                upper=jnp.array([ sensor_noise_bound]),
+                lower=jnp.array([-sensor_noise_bound, 1.0, 1.0]),
+                upper=jnp.array([ sensor_noise_bound, 1.0, 1.0]),
             ),
         ),
+        Scenario(
+            name="Actuator and Sensor Fault",
+            emb_system=_SF_EMB,
+            p_interval=irx.Interval(
+                lower=jnp.array([-sensor_noise_bound, actuator_alpha_lo, actuator_beta_low]),
+                upper=jnp.array([ sensor_noise_bound, actuator_alpha_hi, actuator_beta_high]),
+            )
+        )
     ]
 
 
@@ -801,7 +811,297 @@ def optimize_multistep(scenarios: List[Scenario],
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6.  Main
+# 6.  CBF Obstacle Avoidance — Lagrangian-Penalised Separation
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Default obstacle: 0.5 m radius circle centred at (−1, 0) in the world frame.
+_OBS_CENTER = jnp.array([-1.0, 0.0])
+_OBS_RADIUS = 0.5
+
+
+def obstacle_cbf_value(
+    pos_ivl: irx.Interval,
+    obs_center: jnp.ndarray = _OBS_CENTER,
+    obs_radius: float = _OBS_RADIUS,
+) -> jnp.ndarray:
+    """Minimum of the CBF  h(p) = ‖p − c‖² − r²  over a position interval.
+
+    h(p) ≥ 0 iff p lies outside the circular obstacle (safe region).  For an
+    axis-aligned rectangular position interval the minimum of h is attained at
+    the point of the rectangle closest to the obstacle centre:
+
+        closest = clip(obs_center, pos_ivl.lower, pos_ivl.upper)
+        h_min   = ‖closest − obs_center‖² − obs_radius²
+
+    Parameters
+    ----------
+    pos_ivl    : 2-D position interval  [px_lo, py_lo] … [px_hi, py_hi]
+    obs_center : (2,) obstacle centre   [cx, cy]
+    obs_radius : obstacle radius  r  (m)
+
+    Returns
+    -------
+    Scalar h_min.  Negative → interval intersects the obstacle (unsafe).
+    Zero or positive → interval is entirely outside the obstacle (safe).
+    """
+    closest = jnp.clip(obs_center, pos_ivl.lower, pos_ivl.upper)
+    dist_sq = jnp.sum((closest - obs_center) ** 2)
+    return dist_sq - obs_radius ** 2
+
+
+def separation_loss_cbf_multistep(
+    u_seq: jnp.ndarray,
+    x0_ivl: irx.Interval,
+    scenarios: List[Scenario],
+    dt: float,
+    steps_per_segment: int,
+    obs_center: jnp.ndarray = _OBS_CENTER,
+    obs_radius: float = _OBS_RADIUS,
+    cbf_lambda: float = 10.0,
+) -> jnp.ndarray:
+    """Lagrangian-penalised separation objective with CBF obstacle avoidance.
+
+    Combines the fault-separating objective of separation_loss_multistep with a
+    Control Barrier Function (CBF) obstacle-avoidance constraint via Lagrangian
+    dualization:
+
+        L(u; λ) = min_k Σ_{i<j} overlap(P_i^k, P_j^k)
+                + λ · Σ_{k,i} max(0, −h_min(P_i^k))
+
+    where P_i^k is the 2-D position interval of scenario i at segment end k,
+    and h_min(P) = min_{p ∈ P} h(p) with CBF h(p) = ‖p − c‖² − r².
+
+    The first term drives the reachable sets apart (fault diagnosis).  The
+    second term penalises any scenario interval that enters the obstacle; the
+    Lagrange multiplier λ = cbf_lambda trades off the two objectives.  A
+    single propagation pass is shared between both terms.
+
+    Parameters
+    ----------
+    u_seq            : (num_segments, 3) control sequence  [vx, vy, ω]
+    x0_ivl           : initial state interval
+    scenarios        : list of Scenario objects
+    dt               : Euler step size (s)
+    steps_per_segment: Euler steps held per control segment
+    obs_center       : (2,) obstacle centre  (default: (−1, 0))
+    obs_radius       : obstacle radius in metres  (default: 0.5)
+    cbf_lambda       : Lagrange multiplier λ; larger → stricter obstacle safety
+
+    Returns
+    -------
+    Scalar Lagrangian value.  Minimising drives separation and safety together.
+    """
+    num_segments = u_seq.shape[0]
+    n = len(scenarios)
+
+    # ── Group scenarios by emb_system (mirrors separation_loss_multistep) ──
+    emb_groups: Dict[int, tuple] = {}
+    for idx, s in enumerate(scenarios):
+        eid = id(s.emb_system)
+        if eid not in emb_groups:
+            emb_groups[eid] = (s.emb_system, [], [])
+        emb_groups[eid][1].append(idx)
+        emb_groups[eid][2].append(s.p_interval)
+
+    # ── Single propagation pass (vmap over p_ivl within each group) ──────
+    x_hist_all: List[irx.Interval] = [None] * n
+    for emb_sys, indices, p_ivls in emb_groups.values():
+        p_batch = irx.Interval(
+            lower=jnp.stack([p.lower for p in p_ivls]),
+            upper=jnp.stack([p.upper for p in p_ivls]),
+        )
+
+        def prop_one(p_ivl_single):
+            return _propagate_history(
+                x0_ivl, u_seq, emb_sys, p_ivl_single, dt, steps_per_segment
+            )
+
+        x_hist_batch = jax.vmap(prop_one)(p_batch)
+        for local_i, global_i in enumerate(indices):
+            x_hist_all[global_i] = irx.Interval(
+                lower=x_hist_batch.lower[local_i],
+                upper=x_hist_batch.upper[local_i],
+            )
+
+    # ── Separation loss  (min over segments of pairwise overlap sum) ─────
+    def overlap_at_k(k):
+        pos_ivls_k = [
+            irx.Interval(
+                lower=x_hist_all[i].lower[k, :2],
+                upper=x_hist_all[i].upper[k, :2],
+            )
+            for i in range(n)
+        ]
+        total = jnp.array(0.0)
+        for i in range(n):
+            for j in range(i + 1, n):
+                total = total + overlap_size_lax(pos_ivls_k[i], pos_ivls_k[j])
+        return total
+
+    segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
+    overlap_loss = jnp.min(segment_overlaps)
+
+    # ── CBF penalty  (sum over all segments and scenarios) ───────────────
+    # For each position interval P_i^k we compute h_min = min_{p ∈ P_i^k} h(p)
+    # (worst-case proximity to the obstacle), then penalise any negative value
+    # with relu(−h_min).  Summing over all (k, i) pairs ensures the trajectory
+    # of every scenario stays clear of the obstacle at every segment boundary.
+    cbf_total = jnp.array(0.0)
+    for k in range(num_segments):
+        for i in range(n):
+            pos_ivl_ki = irx.Interval(
+                lower=x_hist_all[i].lower[k, :2],
+                upper=x_hist_all[i].upper[k, :2],
+            )
+            h_min = obstacle_cbf_value(pos_ivl_ki, obs_center, obs_radius)
+            cbf_total = cbf_total + jnp.maximum(jnp.array(0.0), -h_min)
+
+    return overlap_loss + cbf_lambda * cbf_total
+
+
+class CBFMultistepOptimizer:
+    """Multistep sequence optimizer with CBF obstacle-avoidance constraints.
+
+    Wraps separation_loss_cbf_multistep (the Lagrangian-penalised objective)
+    in JIT-compiled loss and gradient callables.  Follows the same interface
+    as MultistepSequenceOptimizer so it can be passed to optimize_multistep_gpu.
+    """
+
+    def __init__(
+        self,
+        scenarios: List[Scenario],
+        x0_ivl: irx.Interval,
+        dt: float,
+        steps_per_segment: int,
+        num_segments: int,
+        obs_center: jnp.ndarray = _OBS_CENTER,
+        obs_radius: float = _OBS_RADIUS,
+        cbf_lambda: float = 10.0,
+    ):
+        self.scenarios = scenarios
+        self.x0_ivl = x0_ivl
+        self.dt = dt
+        self.steps_per_segment = steps_per_segment
+        self.num_segments = num_segments
+        self.obs_center = obs_center
+        self.obs_radius = obs_radius
+        self.cbf_lambda = cbf_lambda
+
+        _loss = partial(
+            separation_loss_cbf_multistep,
+            x0_ivl=x0_ivl,
+            scenarios=scenarios,
+            dt=dt,
+            steps_per_segment=steps_per_segment,
+            obs_center=obs_center,
+            obs_radius=obs_radius,
+            cbf_lambda=cbf_lambda,
+        )
+        self.loss_fn = jax.jit(_loss)            # (S, 3) → scalar
+        self.grad_fn = jax.jit(jax.grad(_loss))  # (S, 3) → (S, 3)
+
+
+def optimize_multistep_cbf(
+    x0_ivl: irx.Interval,
+    scenarios: List[Scenario],
+    dt: float,
+    steps_per_segment: int,
+    num_segments: int,
+    obs_center: jnp.ndarray = _OBS_CENTER,
+    obs_radius: float = _OBS_RADIUS,
+    cbf_lambda: float = 10.0,
+    num_restarts: int = 100,
+    learning_rate: float = 0.01,
+    num_iters: int = 150,
+    seed: int = 42,
+):
+    """GPU-parallel multi-start optimisation with CBF obstacle avoidance.
+
+    Solves the Lagrangian-penalised problem:
+
+        min_{u_seq}  separation_loss(u_seq) + λ · cbf_penalty(u_seq)
+
+    where the CBF encodes the circular obstacle as a safe-set constraint:
+
+        h(p) = ‖p − obs_center‖² − obs_radius² ≥ 0   (safe iff outside circle)
+
+    The penalty term  λ · Σ_{k,i} max(0, −h_min(P_i^k))  is a Lagrangian
+    relaxation of the hard CBF constraint; each P_i^k is the position interval
+    of scenario i at segment end k, and h_min(P) is its worst-case (minimum)
+    CBF value.  Increasing cbf_lambda enforces safety more strictly at the
+    possible cost of higher residual overlap.
+
+    Mirrors optimize_multistep_gpu_rejit but uses CBFMultistepOptimizer in
+    place of MultistepSequenceOptimizer.
+
+    Parameters
+    ----------
+    x0_ivl           : initial state interval
+    scenarios        : list of Scenario objects
+    dt               : Euler step size (s)
+    steps_per_segment: Euler steps held per control segment
+    num_segments     : number of control segments in the sequence
+    obs_center       : (2,) obstacle centre in world frame  (default: (−1, 0) m)
+    obs_radius       : obstacle radius in metres  (default: 0.5)
+    cbf_lambda       : Lagrange multiplier λ; larger → stricter obstacle avoidance
+    num_restarts     : number of parallel random initialisations
+    learning_rate    : gradient descent step size
+    num_iters        : number of gradient steps per restart
+    seed             : PRNG seed for random initialisation
+
+    Returns
+    -------
+    (best_u_seq, best_loss, all_u_seq_final, all_losses)
+    best_u_seq      : (num_segments, 3) optimal control sequence
+    best_loss       : Lagrangian value at best_u_seq
+    all_u_seq_final : (num_restarts, num_segments, 3) final iterates for all restarts
+    all_losses      : (num_restarts,) final Lagrangian values
+    """
+    """GPU-parallel multi-start optimization for control sequences.
+
+    Mirrors optimize_multistart_gpu but for u_seq with shape (num_segments, 3).
+    Returns:
+      best_u_seq, best_loss, all_u_seq_final, all_final_losses
+    """
+    key = jax.random.PRNGKey(seed)
+    u0 = (
+        jax.random.normal(key, (num_restarts, num_segments, 3)) * 0.1
+        + jnp.array([0.5, 0.0, 0.3])
+    )
+    def loss_fn_cbf(u):
+        return separation_loss_cbf_multistep(
+            u_seq=u,
+            x0_ivl=x0_ivl,
+            scenarios=scenarios,
+            dt=dt,
+            steps_per_segment=steps_per_segment,
+            obs_center=obs_center,
+            obs_radius=obs_radius,
+            cbf_lambda=cbf_lambda,
+        ) 
+    
+    grad_fn_cbf = jax.grad(loss_fn_cbf)
+
+    # Vectorize loss/grad across restart axis.
+    batched_loss = jax.vmap(loss_fn_cbf)   # (R,S,3) -> (R,)
+    batched_grad = jax.vmap(grad_fn_cbf)   # (R,S,3) -> (R,S,3)
+
+    def body(_, u_batch):
+        g = batched_grad(u_batch)
+        return _project_u(u_batch - learning_rate * g)
+
+    # One compiled loop on device.
+    u_final = jax.lax.fori_loop(0, num_iters, body, u0)
+    losses = batched_loss(u_final)
+
+    best_idx = jnp.argmin(losses)
+    best_u = u_final[best_idx]
+    best_loss = losses[best_idx]
+    return best_u, best_loss, u_final, losses
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7.  Main
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":

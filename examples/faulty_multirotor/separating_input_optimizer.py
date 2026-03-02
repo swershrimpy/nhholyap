@@ -194,7 +194,7 @@ class SeparatingInputOptimizer:
     def optimize(
         self,
         u_initial: Optional[jnp.ndarray] = None,
-        learning_rate: float = 1e-1,
+        learning_rate: float = 1e3,
         num_iterations: int = 100,
         verbose: bool = False,
     ) -> Tuple[jnp.ndarray, float]:

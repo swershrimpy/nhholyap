@@ -235,7 +235,7 @@ jit_calculate_optimal_open_loop_u_sequence = jit(partial(
     timesteps_per_control=num_steps,
     num_controls=num_steps,
 ))
-SEQUENCE = True
+SEQUENCE = False
 if SEQUENCE:    
     print("Starting JIT compilation (first run)...")
     t0 = time.time()
@@ -313,16 +313,16 @@ else:
     print(f"Optimal loss value: {optimal_loss}")
 
     # --- Visualization (Optional) ---
-    VISUALIZE = False
+    VISUALIZE = True
     if VISUALIZE:
         visualize_trajectory_given_u_K(
             x0_interval=x_interval_example,
             u_ol=optimal_u,
             K=jnp.zeros((2, 2)),
-            dt=dt,
+            dt=0.02,
             w_interval=irx.icentpert(jnp.array([0., 0.]), jnp.zeros(2)),
             p_no_disturbance=p_nominal,
             p_actuator_fault=p_actuator_fault,
             observer_offset=observer_offset,
-            max_iter=10,
+            max_iter=50,
         )
