@@ -82,6 +82,27 @@ def overlap_size_lax_scaled(interval1, interval2, scaling_divisors):
         (intersection_lower, intersection_upper) # Operands to pass to the chosen function
     )
 
+def overlap_size_log(interval1, interval2):
+    intersection_lower = jnp.maximum(interval1.lower, interval2.lower)
+    intersection_upper = jnp.minimum(interval1.upper, interval2.upper)
+
+    def has_overlap(operands):
+        lower, upper = operands
+        return jnp.sum(jnp.log(upper - lower + 1.0))
+
+    def no_overlap(operands):
+        _ = operands
+        return jnp.array(0.0)
+
+    has_no_overlap = jnp.any(intersection_upper < intersection_lower)
+
+    return lax.cond(
+        jnp.logical_not(has_no_overlap),
+        has_overlap,
+        no_overlap,
+        (intersection_lower, intersection_upper),
+    )
+
 def overlap_sum_lax(interval1, interval2):
     # Calculate intersection bounds (this part is fine)
     intersection_lower = jnp.maximum(interval1.lower, interval2.lower)

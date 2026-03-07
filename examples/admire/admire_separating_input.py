@@ -59,9 +59,9 @@ from dataclasses import dataclass
 from faulty_car.interval_functions import overlap_size_lax
 from admire import AdmireNineDoFLinAct
 
-# Control input box constraints: all 10 surface deflections ∈ [−0.5, 0.5] rad.
-_U_LO = jnp.ones(10) * -0.5
-_U_HI = jnp.ones(10) *  0.5
+# Control input box constraints: all 10 surface deflections ∈ [−0.05, 0.05] rad.
+_U_LO = jnp.ones(10) * -0.05
+_U_HI = jnp.ones(10) *  0.05
 
 
 def _project_u(u: jnp.ndarray) -> jnp.ndarray:

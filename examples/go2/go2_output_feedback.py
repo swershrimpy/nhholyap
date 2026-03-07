@@ -385,11 +385,12 @@ def optimize_output_feedback_gpu(
             theta=u,
             x0_ivl=x0_ivl,
             cl_scenarios=cl_scenarios,
-            
+            dt=dt,
+            num_steps=num_steps
         )
-
-    batched_loss = jax.vmap(opt.loss_fn)   # (R, 12) → (R,)
-    batched_grad = jax.vmap(opt.grad_fn)   # (R, 12) → (R, 12)
+    feedback_grad = jax.grad(feedback_loss)
+    batched_loss = jax.vmap(feedback_loss)   # (R, 12) → (R,)
+    batched_grad = jax.vmap(feedback_grad)   # (R, 12) → (R, 12)
 
     def body(_, theta_batch):
         g = batched_grad(theta_batch)
