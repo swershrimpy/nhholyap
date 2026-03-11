@@ -56,7 +56,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from matplotlib.backends.backend_pdf import PdfPages
 from dataclasses import dataclass
 
-from faulty_car.interval_functions import overlap_size_lax
+from faulty_car.interval_functions import overlap_size_log
 from admire import AdmireNineDoFLinAct
 
 # Control input box constraints: all 10 surface deflections ∈ [−0.05, 0.05] rad.
@@ -254,7 +254,7 @@ def separation_loss(u: jnp.ndarray,
     total = jnp.array(0.0)
     for i in range(n):
         for j in range(i + 1, n):
-            total = total + overlap_size_lax(out_ivls[i], out_ivls[j])
+            total = total + overlap_size_log(out_ivls[i], out_ivls[j])
     return total
 
 
@@ -332,7 +332,7 @@ def separation_loss_multistep(u_seq: jnp.ndarray,
         total = jnp.array(0.0)
         for i in range(n):
             for j in range(i + 1, n):
-                total = total + overlap_size_lax(out_ivls_k[i], out_ivls_k[j])
+                total = total + overlap_size_log(out_ivls_k[i], out_ivls_k[j])
         return total
 
     segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
@@ -393,7 +393,7 @@ class SeparatingInputOptimizer:
         for i in range(n):
             for j in range(i + 1, n):
                 key = f"{self.scenarios[i].name} vs {self.scenarios[j].name}"
-                overlaps[key] = float(overlap_size_lax(out_ivls[i], out_ivls[j]))
+                overlaps[key] = float(overlap_size_log(out_ivls[i], out_ivls[j]))
 
         volumes = {
             s.name: float(jnp.prod(iv.upper - iv.lower))
@@ -447,7 +447,7 @@ class MultistepSequenceOptimizer:
         for i in range(n):
             for j in range(i + 1, n):
                 key = f"{self.scenarios[i].name} vs {self.scenarios[j].name}"
-                overlaps[key] = float(overlap_size_lax(out_ivls[i], out_ivls[j]))
+                overlaps[key] = float(overlap_size_log(out_ivls[i], out_ivls[j]))
 
         volumes = {
             s.name: float(jnp.prod(iv.upper - iv.lower))
@@ -800,7 +800,7 @@ def optimize_multistep(
     for i in range(n):
         for j in range(i + 1, n):
             key_ij = f"{scenarios[i].name} vs {scenarios[j].name}"
-            overlaps[key_ij] = float(overlap_size_lax(out_ivls[i], out_ivls[j]))
+            overlaps[key_ij] = float(overlap_size_log(out_ivls[i], out_ivls[j]))
     volumes = {
         s.name: float(jnp.prod(iv.upper - iv.lower))
         for s, iv in zip(scenarios, out_ivls)

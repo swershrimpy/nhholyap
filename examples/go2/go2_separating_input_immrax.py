@@ -186,8 +186,8 @@ def create_scenarios(
             name="Actuator and Sensor Fault",
             emb_system=_SF_EMB,
             p_interval=irx.Interval(
-                lower=jnp.array([-sensor_noise_bound, actuator_alpha_lo, actuator_beta_low]),
-                upper=jnp.array([ sensor_noise_bound, actuator_alpha_hi, actuator_beta_high]),
+                lower=jnp.array([-sensor_noise_bound, actuator_alpha_lo/2, actuator_beta_low/2]),
+                upper=jnp.array([ sensor_noise_bound, actuator_alpha_hi/2, actuator_beta_high/2]),
             )
         )
     ]
@@ -691,19 +691,38 @@ def optimize_multistep_gpu_rejit(
     num_iters: int = 150,
     seed: int = 42,
 ):
-    return optimize_multistep_gpu(
-        MultistepSequenceOptimizer(
-            scenarios=scenarios,
-            x0_ivl=x0_ivl,
-            dt=dt,
-            steps_per_segment=steps_per_segment,
-            num_segments=num_segments,
-        ),
-        num_restarts=num_restarts,
-        learning_rate=learning_rate,
-        num_iters=num_iters,
-        seed=seed
+    key = jax.random.PRNGKey(seed)
+    u0 = (
+        jax.random.normal(key, (num_restarts, num_segments, 3)) * 0.1
+        + jnp.array([0.5, 0.0, 0.3])
     )
+
+    def loss_fn_multistep(u):
+        return separation_loss_multistep(
+            u,
+            x0_ivl=x0_ivl,
+            scenarios=scenarios,
+            dt=dt,
+            steps_per_segment=steps_per_segment
+        )
+
+    
+    # Vectorize loss/grad across restart axis.
+    batched_loss = jax.vmap(loss_fn_multistep)   # (R,S,3) -> (R,)
+    batched_grad = jax.vmap(jax.grad(loss_fn_multistep))   # (R,S,3) -> (R,S,3)
+
+    def body(_, u_batch):
+        g = batched_grad(u_batch)
+        return _project_u(u_batch - learning_rate * g)
+
+    # One compiled loop on device.
+    u_final = jax.lax.fori_loop(0, num_iters, body, u0)
+    losses = batched_loss(u_final)
+
+    best_idx = jnp.argmin(losses)
+    best_u = u_final[best_idx]
+    best_loss = losses[best_idx]
+    return best_u, best_loss, u_final, losses
 
 
 def optimize_multistep(scenarios: List[Scenario],

@@ -269,7 +269,7 @@ def _overlap_vol(ivl_a, ivl_b):
     """Scalar overlap volume of two full 9-D state intervals."""
     lo = np.maximum(np.array(ivl_a.lower), np.array(ivl_b.lower))
     hi = np.minimum(np.array(ivl_a.upper), np.array(ivl_b.upper))
-    return float(np.prod(np.maximum(hi - lo, 0.0)))
+    return float(np.log(np.prod(np.maximum(hi - lo, 0.0))))
 
 # ── Unrefined overlaps: (n_all_pairs, num_steps+1) ────────────────────────────
 unref_mat = np.zeros((n_all_pairs, num_steps + 1))
@@ -357,4 +357,48 @@ fname2 = HERE / 'admire_overlap_over_time.pdf'
 plt.savefig(fname2, bbox_inches='tight')
 plt.close(fig2)
 print(f"Saved {fname2}")
+
+# ── Log(overlap volume + 1) heatmap ───────────────────────────────────────────
+# Recover raw volumes from the log matrices (entries of -inf/large-neg → vol≈0).
+unref_vol_raw = np.exp(np.clip(unref_mat, -500, 500))
+ref_vol_raw   = np.exp(np.clip(ref_mat,   -500, 500))
+unref_log1p   = np.log1p(unref_vol_raw)
+ref_log1p     = np.log1p(ref_vol_raw)
+
+fig3, (ax_u3, ax_r3) = plt.subplots(1, 2, figsize=(14, max(6, n_all_pairs * 0.22)),
+                                      gridspec_kw={'wspace': 0.05})
+
+def _heatmap_log1p(ax, mat, t_vals, title):
+    vmax = max(mat.max(), 1e-12)
+    im = ax.imshow(mat, aspect='auto', origin='upper',
+                   extent=[t_vals[0] - dt/2, t_vals[-1] + dt/2,
+                            n_all_pairs - 0.5, -0.5],
+                   vmin=0, vmax=vmax, cmap='YlOrRd')
+    ax.set_yticks(range(n_all_pairs))
+    ax.set_yticklabels(pair_labels, fontsize=5)
+    ax.set_xlabel('Time (s)', fontsize=9)
+    ax.set_title(title, fontsize=9, fontweight='bold')
+    for tv in t_vals:
+        ax.axvline(tv, color='white', linewidth=0.3, alpha=0.5)
+    return im
+
+im_u3 = _heatmap_log1p(ax_u3, unref_log1p, t_unref, 'Unrefined  log(overlap volume + 1)')
+im_r3 = _heatmap_log1p(ax_r3, ref_log1p,   t_ref,   'Refined  log(overlap volume + 1)')
+ax_r3.set_yticklabels([])
+
+fig3.colorbar(im_u3, ax=ax_u3, fraction=0.03, pad=0.02, label='log(overlap vol. + 1)')
+fig3.colorbar(im_r3, ax=ax_r3, fraction=0.03, pad=0.02, label='log(overlap vol. + 1)')
+
+plt.suptitle(
+    f'ADMIRE — log(overlap volume + 1) for all {n_all_pairs} scenario pairs over time\n'
+    f'({num_steps} steps × {dt} s = {num_steps*dt:.1f} s  |'
+    r'  state = $[V_t,\alpha,\beta,p_b,q_b,r_b,\psi,\theta,\phi]$)',
+    fontsize=10, fontweight='bold',
+)
+plt.tight_layout()
+
+fname3 = HERE / 'admire_overlap_log1p.pdf'
+plt.savefig(fname3, bbox_inches='tight')
+plt.close(fig3)
+print(f"Saved {fname3}")
 print("Done.")
