@@ -90,6 +90,14 @@ _THETA_HI = jnp.concatenate([jnp.full(4,  _K_MAX), _U_HI])
 _OBS_OFFSET_SENSOR = jnp.array([0.2, 0.2])
 _OBS_SCALE_SENSOR  = jnp.array([0.95])
 
+# ── Tracking controller actuation limits ──────────────────────────────────────
+# v ∈ [-1, 1] m/s,  ω ∈ [-0.15, 0.15] rad/s
+_CL_U_LO_TRACK = jnp.array([-1.0, -0.5])
+_CL_U_HI_TRACK = jnp.array([ 1.0,  0.5])
+# theta = [K.flat (4-D), u_ff (2-D)] — both K and feedforward are optimised
+_THETA_LO_TRACK = jnp.concatenate([jnp.full(4, -_K_MAX), _CL_U_LO_TRACK])
+_THETA_HI_TRACK = jnp.concatenate([jnp.full(4,  _K_MAX), _CL_U_HI_TRACK])
+
 
 def _project_theta(theta: jnp.ndarray) -> jnp.ndarray:
     return jnp.clip(theta, _THETA_LO, _THETA_HI)
@@ -190,6 +198,68 @@ _SF_CL_SYS = CarSensorFaultCLSystem()
 _SF_CL_EMB = irx.natemb(_SF_CL_SYS)
 
 
+# ── Tracking CL systems  (u = [K.flat, y_hat, u_ol], 8-D) ────────────────────
+
+class CarNomActTrackCLSystem(irx.System):
+    """Nominal / actuator-fault car under error-feedback tracking control.
+
+    immrax convention:
+        u = [K.flat, y_hat, u_ff]  ∈ R^8
+            K     : (2,2) feedback gain       (optimisation variable)
+            y_hat : (2,)  reference position  (fixed per step, from traj planner)
+            u_ff  : (2,)  learned feedforward (optimisation variable)
+        p = [alpha]  ∈ R^1
+
+    Control law:
+        u_k = clip(K @ (y − ŷ) + u_ff,  _CL_U_LO_TRACK, _CL_U_HI_TRACK)
+    """
+
+    def __init__(self):
+        self.evolution = 'continuous'
+        self.xlen = 3
+
+    def f(self, t, x, u, p):
+        K     = u[:4].reshape(2, 2)
+        y_hat = u[4:6]
+        u_ff  = u[6:8]
+        y     = x[0:2]
+        ctrl  = jnp.clip(K @ (y - y_hat) + u_ff, _CL_U_LO_TRACK, _CL_U_HI_TRACK)
+        v, omega = ctrl[0], ctrl[1]
+        alpha = p[0]
+        phi   = x[2]
+        return jnp.array([v * jnp.cos(phi), v * jnp.sin(phi), alpha * omega])
+
+
+class CarSensorFaultTrackCLSystem(irx.System):
+    """Sensor-fault car under error-feedback tracking control.
+
+    Observation is biased:  y = scale · [px, py] + offset.
+    The robot uses its (corrupted) observation to compute the tracking error.
+    """
+
+    def __init__(self):
+        self.evolution = 'continuous'
+        self.xlen = 3
+
+    def f(self, t, x, u, p):
+        K     = u[:4].reshape(2, 2)
+        y_hat = u[4:6]
+        u_ff  = u[6:8]
+        y     = _OBS_SCALE_SENSOR[0] * x[0:2] + _OBS_OFFSET_SENSOR
+        ctrl  = jnp.clip(K @ (y - y_hat) + u_ff, _CL_U_LO_TRACK, _CL_U_HI_TRACK)
+        v, omega = ctrl[0], ctrl[1]
+        alpha = p[0]
+        phi   = x[2]
+        return jnp.array([v * jnp.cos(phi), v * jnp.sin(phi), alpha * omega])
+
+
+_NOM_ACT_TRACK_CL_SYS = CarNomActTrackCLSystem()
+_NOM_ACT_TRACK_CL_EMB = irx.natemb(_NOM_ACT_TRACK_CL_SYS)
+
+_SF_TRACK_CL_SYS = CarSensorFaultTrackCLSystem()
+_SF_TRACK_CL_EMB = irx.natemb(_SF_TRACK_CL_SYS)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 3.  Closed-loop fault scenarios
 # ══════════════════════════════════════════════════════════════════════════════
@@ -235,6 +305,46 @@ def create_cl_scenarios(
     ]
 
 
+def create_track_cl_scenarios(
+    actuator_alpha_lo: float = 0.0,
+    actuator_alpha_hi: float = 0.5,
+) -> List[Scenario]:
+    """Three closed-loop fault scenarios for the *tracking* optimiser.
+
+    Uses the error-feedback CL systems (CarNomActTrackCLSystem /
+    CarSensorFaultTrackCLSystem) whose 'u' argument is 8-D:
+        u = [K.flat, y_hat, u_ff]
+    Both K (first 4 elements) and u_ff (last 2) are optimisation variables;
+    y_hat is fixed and packed per-step by tracking_cbf_loss before each prop call.
+    """
+    return [
+        Scenario(
+            name="Nominal",
+            emb_system=_NOM_ACT_TRACK_CL_EMB,
+            p_interval=irx.icentpert(jnp.array([1.0]), jnp.zeros(1)),
+            obs_offset=jnp.zeros(2),
+            obs_scale=jnp.ones(1),
+        ),
+        Scenario(
+            name="Actuator Fault",
+            emb_system=_NOM_ACT_TRACK_CL_EMB,
+            p_interval=irx.Interval(
+                lower=jnp.array([actuator_alpha_lo]),
+                upper=jnp.array([actuator_alpha_hi]),
+            ),
+            obs_offset=jnp.zeros(2),
+            obs_scale=jnp.ones(1),
+        ),
+        Scenario(
+            name="Sensor Fault",
+            emb_system=_SF_TRACK_CL_EMB,
+            p_interval=irx.icentpert(jnp.array([1.0]), jnp.zeros(1)),
+            obs_offset=_OBS_OFFSET_SENSOR,
+            obs_scale=_OBS_SCALE_SENSOR,
+        ),
+    ]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 4.  Interval propagation helpers
 # ══════════════════════════════════════════════════════════════════════════════
@@ -270,19 +380,22 @@ def cl_euler_multistep(
 
     Each sub-step holds theta constant (zero-order hold within the control
     interval).  When num_substeps == 1 this is identical to cl_euler_step.
-    Uses jax.lax.fori_loop so XLA sees a fixed-size graph regardless of
-    num_substeps.
+
+    Uses lax.scan for the sub-steps (not fori_loop) so the backward pass is
+    a clean scan that XLA can vectorise efficiently when vmap is applied.
+    The sub-step count is a compile-time constant, but kept as a scan rather
+    than a Python loop to avoid OOM when num_substeps is large (e.g. 10+).
     """
     sub_dt = dt / num_substeps
     xlen   = x_ivl.lower.shape[0]
 
-    def sub_step(_, x_arr: jnp.ndarray) -> jnp.ndarray:
+    def sub_step(x_arr: jnp.ndarray, _) -> tuple:
         x     = irx.Interval(lower=x_arr[:xlen], upper=x_arr[xlen:])
         x_nxt = cl_euler_step(emb_sys, x, theta, p_ivl, sub_dt)
-        return jnp.concatenate([x_nxt.lower, x_nxt.upper])
+        return jnp.concatenate([x_nxt.lower, x_nxt.upper]), None
 
-    x_arr0   = jnp.concatenate([x_ivl.lower, x_ivl.upper])
-    x_arr_f  = jax.lax.fori_loop(0, num_substeps, sub_step, x_arr0)
+    x_arr0     = jnp.concatenate([x_ivl.lower, x_ivl.upper])
+    x_arr_f, _ = jax.lax.scan(sub_step, x_arr0, None, length=num_substeps)
     return irx.Interval(lower=x_arr_f[:xlen], upper=x_arr_f[xlen:])
 
 
@@ -620,34 +733,34 @@ def optimize_output_feedback_cbf(
 # ══════════════════════════════════════════════════════════════════════════════
 
 def tracking_cbf_loss(
-    theta_seq: jnp.ndarray,     # (num_steps, 6) — per-step [K.flat, r]
+    theta_seq: jnp.ndarray,     # (num_steps, 6) — per-step [K.flat, u_ff]
     x0_ivl: irx.Interval,
     cl_scenarios: List[Scenario],
     dt: float,
+    y_hat_seq: jnp.ndarray,     # (num_steps, 2) — reference positions (fixed)
     obstacles: jnp.ndarray,     # (N, 3) — [cx, cy, r_obs]
     cbf_weight: float = 1.0,
     num_substeps: int = 1,
 ) -> jnp.ndarray:
-    """Combined separation + CBF loss for a tracking output-feedback controller.
+    """Combined separation + CBF loss for the error-feedback tracking controller.
 
     Control law at step k
     ---------------------
-        u_k = clip(K_k @ y_k + r_k,  u_lo, u_hi)
+        u_k = clip(K_k @ (y_k − ŷ_k) + u_ff_k,  _CL_U_LO_TRACK, _CL_U_HI_TRACK)
 
-    where theta_seq[k] = [K_k.flat, r_k] contains a per-step gain K_k ∈ R^{2×2}
-    and per-step feedforward r_k ∈ R^2.  The reference trajectory enters only
-    through the initialisation in the outer optimiser, not through this loss.
+    The optimisation variable is theta_seq ∈ R^{num_steps × 6}:
+        theta_seq[k, :4] = K_k.flat   — per-step feedback gain
+        theta_seq[k, 4:] = u_ff_k     — per-step learned feedforward
 
-    Decision variable
-    -----------------
-    theta_seq ∈ R^{num_steps × 6}
+    y_hat_seq is fixed (from the trajectory planner) and packed into the full
+    8-D input u = [K.flat, y_hat, u_ff] consumed by the CL systems.
 
     Parameters
     ----------
+    theta_seq  : (num_steps, 6)  per-step [K_k.flat, u_ff_k] — optimisation variable
+    y_hat_seq  : (num_steps, 2)  reference position at each step (fixed)
     num_substeps : int
-        Number of forward-Euler sub-steps per control interval.  Each control
-        input theta_k is held constant for num_substeps steps of size
-        dt/num_substeps.  Default 1 (original behaviour).
+        Forward-Euler sub-steps per control interval (default 1).
     """
     n         = len(cl_scenarios)
     pairs     = [(i, j) for i in range(n) for j in range(i + 1, n)]
@@ -660,18 +773,21 @@ def tracking_cbf_loss(
     def arr_to_ivl(arr: jnp.ndarray) -> irx.Interval:
         return irx.Interval(lower=arr[:xlen], upper=arr[xlen:])
 
-    def make_theta(k: int) -> jnp.ndarray:
-        """Return the controller parameters for step k."""
-        return theta_seq[k]
+    def prop(emb_sys, x_ivl, full_theta, p_ivl):
+        """Propagate one control interval (num_substeps Euler sub-steps).
 
-    def prop(emb_sys, x_ivl, theta, p_ivl):
-        """Propagate one control interval (num_substeps Euler sub-steps)."""
-        return cl_euler_multistep(emb_sys, x_ivl, theta, p_ivl, dt, num_substeps)
+        full_theta = [K.flat, y_hat, u_ff]  (8-D)
+        """
+        return cl_euler_multistep(emb_sys, x_ivl, full_theta, p_ivl, dt, num_substeps)
 
-    # ── Step 1: propagate with theta_0 ────────────────────────────────────
-    theta_0 = make_theta(0)
-    x_ivls  = [
-        prop(s.emb_system, x0_ivl, theta_0, s.p_interval)
+    def pack(k):
+        """Pack the 8-D input for step k: [K_k.flat, y_hat_k, u_ff_k]."""
+        return jnp.concatenate([theta_seq[k, :4], y_hat_seq[k], theta_seq[k, 4:6]])
+
+    # ── Step 1: propagate with full theta at step 0 ───────────────────────
+    full_0 = pack(0)
+    x_ivls = [
+        prop(s.emb_system, x0_ivl, full_0, s.p_interval)
         for s in cl_scenarios
     ]
     obs_ivls = [_obs_interval(x, s) for x, s in zip(x_ivls, cl_scenarios)]
@@ -690,17 +806,21 @@ def tracking_cbf_loss(
     pxi_arr = jnp.stack([ivl_to_arr(x_ivls[i]) for i, j in pairs])
     pxj_arr = jnp.stack([ivl_to_arr(x_ivls[j]) for i, j in pairs])
 
-    # ── Steps 2..num_steps via fori_loop with time-varying theta ──────────
-    def step_body(k, carry):
+    # ── Steps 2..num_steps: Python loop (unrolled at trace time) ─────────
+    # num_steps is a compile-time constant (derived from theta_seq.shape[0],
+    # which is static inside jax.jit).  Unrolling with a Python for-loop
+    # inlines all control-step bodies into the XLA graph, giving the compiler
+    # full visibility to fuse and schedule across steps — the same reason
+    # cl_euler_multistep is unrolled above.  For the typical horizon of 5
+    # steps this adds negligible graph size while noticeably reducing the
+    # while-loop overhead that hurts vmap'd gradient throughput.
+    def step_fn(carry, full_theta_k):
         x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost = carry
-
-        # theta changes every step: r_eff_k = u_ol[k+1] − K @ ŷ[k+1]
-        theta_k = make_theta(k + 1)
 
         # Unrefined propagation (for CBF)
         x_next_list = [
             prop(cl_scenarios[si].emb_system, arr_to_ivl(x_arr[si]),
-                 theta_k, cl_scenarios[si].p_interval)
+                 full_theta_k, cl_scenarios[si].p_interval)
             for si in range(n)
         ]
         x_next_arr = jnp.stack([ivl_to_arr(x) for x in x_next_list])
@@ -754,8 +874,8 @@ def tracking_cbf_loss(
                 ]),
             )
 
-            xn_i = prop(cl_scenarios[i].emb_system, xi_ref, theta_k, cl_scenarios[i].p_interval)
-            xn_j = prop(cl_scenarios[j].emb_system, xj_ref, theta_k, cl_scenarios[j].p_interval)
+            xn_i = prop(cl_scenarios[i].emb_system, xi_ref, full_theta_k, cl_scenarios[i].p_interval)
+            xn_j = prop(cl_scenarios[j].emb_system, xj_ref, full_theta_k, cl_scenarios[j].p_interval)
 
             raw_cost = overlap_size_lax(
                 _obs_interval(xn_i, cl_scenarios[i]),
@@ -766,12 +886,14 @@ def tracking_cbf_loss(
             new_pxj_list.append(ivl_to_arr(xn_j))
 
         min_sep_cost = jnp.minimum(min_sep_cost, step_sep_cost)
-        return (x_next_arr, jnp.stack(new_pxi_list), jnp.stack(new_pxj_list), cbf_pen, min_sep_cost)
+        new_carry = (x_next_arr, jnp.stack(new_pxi_list), jnp.stack(new_pxj_list),
+                     cbf_pen, min_sep_cost)
+        return new_carry, None
 
-    init_carry = (x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost)
-    _, _, _, cbf_pen_f, min_sep_f = jax.lax.fori_loop(
-        0, num_steps - 1, step_body, init_carry
-    )
+    carry = (x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost)
+    for k in range(1, num_steps):
+        carry, _ = step_fn(carry, pack(k))
+    _, _, _, cbf_pen_f, min_sep_f = carry
     return min_sep_f + cbf_weight * cbf_pen_f
 
 
@@ -779,8 +901,7 @@ def optimize_tracking_cbf_gpu(
     x0_ivl: irx.Interval,
     cl_scenarios: List[Scenario],
     dt: float,
-    y_hat_seq: jnp.ndarray,     # (num_steps, 2) — reference positions (init only)
-    u_ol_seq: jnp.ndarray,      # (num_steps, 2) — open-loop controls (init only)
+    y_hat_seq: jnp.ndarray,     # (num_steps, 2) — reference positions (fixed)
     obstacles: jnp.ndarray,     # (N, 3)
     cbf_weight: float = 1.0,
     num_restarts: int = 100,
@@ -789,45 +910,35 @@ def optimize_tracking_cbf_gpu(
     seed: int = 42,
     num_substeps: int = 1,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """GPU-parallel multi-start gradient descent for a per-step tracking controller.
+    """GPU-parallel multi-start gradient descent for the error-feedback tracking controller.
 
-    The decision variable is theta_seq ∈ R^{num_steps × 6}, where each row
-    theta_k = [K_k.flat, r_k] contains an independent gain K_k ∈ R^{2×2} and
-    feedforward r_k ∈ R^2 for step k.  The control law is:
+    Decision variable:  theta_seq ∈ R^{num_steps × 6}
+        Each row theta_k = [K_k.flat (4-D), u_ff_k (2-D)]
+        Both the feedback gain and feedforward are jointly optimised.
 
-        u_k = clip(K_k @ y_k + r_k,  u_lo, u_hi)
+    Control law:
+        u_k = clip(K_k @ (y_k − ŷ_k) + u_ff_k,  [-1,-0.15], [1, 0.15])
 
-    Initialisation: K_k ≈ 0,  r_k = u_ol_seq[k]  (tracks the reference
-    open-loop trajectory with zero feedback correction at startup).
+    Actuation limits enforced inside the CL system:
+        v  ∈ [-1.0,  1.0]  m/s
+        ω  ∈ [-0.15, 0.15] rad/s
 
-    Parameters
-    ----------
-    y_hat_seq : (num_steps, 2)
-        Reference positions — used only to determine num_steps and for a
-        warm-start initialisation of r_k.  Not used in the loss itself.
-    u_ol_seq  : (num_steps, 2)
-        Open-loop reference controls — used to initialise r_k = u_ol_k.
-    num_substeps : int
-        Number of forward-Euler sub-steps per control interval (default 1).
+    Initialisation: K_k = 0, u_ff_k = 0  (small Gaussian noise around zero).
 
     Returns
     -------
     (best_theta_seq, best_loss, all_theta_seq_final, all_losses)
-    best_theta_seq      : (num_steps, 6)  optimal per-step controller params
-    best_loss           : scalar          combined loss at best_theta_seq
+    best_theta_seq      : (num_steps, 6)  optimal per-step [K_k.flat, u_ff_k]
+    best_loss           : scalar
     all_theta_seq_final : (num_restarts, num_steps, 6)
     all_losses          : (num_restarts,)
     """
     num_steps = y_hat_seq.shape[0]
     key       = jax.random.PRNGKey(seed)
 
-    # Initialise: K_k ≈ 0, r_k = u_ol_k  →  theta_mean[k] = [0,0,0,0, u_ol_k]
-    theta_mean = jnp.concatenate(
-        [jnp.zeros((num_steps, 4)), u_ol_seq], axis=-1
-    )  # (num_steps, 6)
-
+    # Initialise K ≈ 0, u_ff ≈ 0  (small Gaussian noise around zero)
     noise   = jax.random.normal(key, (num_restarts, num_steps, 6)) * 0.1
-    theta0  = noise + theta_mean[None]   # (num_restarts, num_steps, 6)
+    theta0  = noise  # (num_restarts, num_steps, 6)
 
     def loss_fn(theta_seq):
         return tracking_cbf_loss(
@@ -835,6 +946,7 @@ def optimize_tracking_cbf_gpu(
             x0_ivl=x0_ivl,
             cl_scenarios=cl_scenarios,
             dt=dt,
+            y_hat_seq=y_hat_seq,
             obstacles=obstacles,
             cbf_weight=cbf_weight,
             num_substeps=num_substeps,
@@ -845,18 +957,245 @@ def optimize_tracking_cbf_gpu(
 
     def body(_, theta_batch):
         g = batched_grad(theta_batch)
-        return jnp.clip(theta_batch - learning_rate * g, _THETA_LO, _THETA_HI)
+        return jnp.clip(theta_batch - learning_rate * g, _THETA_LO_TRACK, _THETA_HI_TRACK)
 
     theta_final  = jax.lax.fori_loop(0, num_iters, body, theta0)
     losses       = batched_loss(theta_final)
     best_idx     = jnp.argmin(losses)
-    best_theta   = theta_final[best_idx]   # (num_steps, 6)
+    best_theta   = theta_final[best_idx]   # (num_steps, 4)
     best_loss    = losses[best_idx]
     return best_theta, best_loss, theta_final, losses
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 8.  Diagnostics
+# 8.  Open-loop separating controller with CBF
+# ══════════════════════════════════════════════════════════════════════════════
+
+def create_ol_scenarios(
+    actuator_alpha_lo: float = 0.0,
+    actuator_alpha_hi: float = 0.5,
+) -> List[Scenario]:
+    """Three open-loop fault scenarios (u = [v, ω] directly, no output feedback).
+
+    Reuses the open-loop embeddings from faulty_car_separating_input:
+      Nominal       : alpha = 1,             y = [px, py]
+      Actuator Fault: alpha ∈ [lo, hi],      y = [px, py]
+      Sensor Fault  : alpha = 1,             y = [0.95·px + 0.2, 0.95·py + 0.2]
+    """
+    from faulty_car_separating_input import create_scenarios
+    return create_scenarios(actuator_alpha_lo, actuator_alpha_hi)
+
+
+def ol_cbf_loss(
+    theta_seq: jnp.ndarray,     # (num_steps, 2) — per-step [v, ω]
+    x0_ivl: irx.Interval,
+    ol_scenarios: List[Scenario],
+    dt: float,
+    obstacles: jnp.ndarray,     # (N, 3) — [cx, cy, r_obs]
+    cbf_weight: float = 1.0,
+) -> jnp.ndarray:
+    """Combined separation + CBF loss for an open-loop control sequence.
+
+    Control law at step k
+    ---------------------
+        u_k = theta_seq[k]   (2-D: [v, ω]; same input applied to all scenarios)
+
+    No output feedback — there is no gain K and no reference y_hat.  The same
+    open-loop command u_k is broadcast to every scenario's dynamics.
+
+    Parameters
+    ----------
+    theta_seq   : (num_steps, 2)  per-step [v_k, ω_k] — the optimisation variable
+    x0_ivl      : initial state interval  [px, py, phi]
+    ol_scenarios: list from create_ol_scenarios()
+    dt          : Euler step size (s)
+    obstacles   : (N, 3) array — each row [cx, cy, r_obs]
+    cbf_weight  : weight on the CBF penalty term
+    """
+    n         = len(ol_scenarios)
+    pairs     = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    num_steps = theta_seq.shape[0]
+    xlen      = x0_ivl.lower.shape[0]
+
+    def ivl_to_arr(ivl: irx.Interval) -> jnp.ndarray:
+        return jnp.concatenate([ivl.lower, ivl.upper])
+
+    def arr_to_ivl(arr: jnp.ndarray) -> irx.Interval:
+        return irx.Interval(lower=arr[:xlen], upper=arr[xlen:])
+
+    # ── Step 1 ────────────────────────────────────────────────────────────
+    u0 = theta_seq[0]
+    x_ivls = [
+        cl_euler_step(s.emb_system, x0_ivl, u0, s.p_interval, dt)
+        for s in ol_scenarios
+    ]
+    obs_ivls = [_obs_interval(x, s) for x, s in zip(x_ivls, ol_scenarios)]
+
+    sep_cost0 = jnp.array(0.0)
+    for i in range(n):
+        for j in range(i + 1, n):
+            sep_cost0 = sep_cost0 + overlap_size_lax(obs_ivls[i], obs_ivls[j])
+    min_sep_cost = sep_cost0
+
+    cbf_pen = jnp.array(0.0)
+    for x in x_ivls:
+        cbf_pen = cbf_pen + cbf_penalty_interval(x, obstacles)
+
+    x_arr   = jnp.stack([ivl_to_arr(x)        for x      in x_ivls])
+    pxi_arr = jnp.stack([ivl_to_arr(x_ivls[i]) for i, j  in pairs])
+    pxj_arr = jnp.stack([ivl_to_arr(x_ivls[j]) for i, j  in pairs])
+
+    # ── Steps 2..num_steps: Python loop (unrolled at trace time) ─────────
+    def step_fn(carry, u_k):
+        x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost = carry
+
+        # Unrefined propagation (for CBF)
+        x_next_list = [
+            cl_euler_step(ol_scenarios[si].emb_system, arr_to_ivl(x_arr[si]),
+                          u_k, ol_scenarios[si].p_interval, dt)
+            for si in range(n)
+        ]
+        x_next_arr = jnp.stack([ivl_to_arr(x) for x in x_next_list])
+        for x in x_next_list:
+            cbf_pen = cbf_pen + cbf_penalty_interval(x, obstacles)
+
+        # Intersection refinement per pair
+        step_sep_cost = jnp.array(0.0)
+        new_pxi_list  = []
+        new_pxj_list  = []
+
+        for idx, (i, j) in enumerate(pairs):
+            xi = arr_to_ivl(pxi_arr[idx])
+            xj = arr_to_ivl(pxj_arr[idx])
+            obs_i = _obs_interval(xi, ol_scenarios[i])
+            obs_j = _obs_interval(xj, ol_scenarios[j])
+
+            y_lo = jnp.maximum(obs_i.lower, obs_j.lower)
+            y_hi = jnp.minimum(obs_i.upper, obs_j.upper)
+            has_overlap = jnp.all(y_hi >= y_lo)
+
+            fallback  = (xi.lower[:2] + xi.upper[:2]) / 2
+            y_lo_safe = jnp.where(has_overlap, y_lo, fallback)
+            y_hi_safe = jnp.where(has_overlap, y_hi, fallback)
+
+            si_s = ol_scenarios[i].obs_scale[0]
+            sj_s = ol_scenarios[j].obs_scale[0]
+
+            xi_ref = irx.Interval(
+                lower=jnp.array([
+                    (y_lo_safe[0] - ol_scenarios[i].obs_offset[0]) / si_s,
+                    (y_lo_safe[1] - ol_scenarios[i].obs_offset[1]) / si_s,
+                    xi.lower[2],
+                ]),
+                upper=jnp.array([
+                    (y_hi_safe[0] - ol_scenarios[i].obs_offset[0]) / si_s,
+                    (y_hi_safe[1] - ol_scenarios[i].obs_offset[1]) / si_s,
+                    xi.upper[2],
+                ]),
+            )
+            xj_ref = irx.Interval(
+                lower=jnp.array([
+                    (y_lo_safe[0] - ol_scenarios[j].obs_offset[0]) / sj_s,
+                    (y_lo_safe[1] - ol_scenarios[j].obs_offset[1]) / sj_s,
+                    xj.lower[2],
+                ]),
+                upper=jnp.array([
+                    (y_hi_safe[0] - ol_scenarios[j].obs_offset[0]) / sj_s,
+                    (y_hi_safe[1] - ol_scenarios[j].obs_offset[1]) / sj_s,
+                    xj.upper[2],
+                ]),
+            )
+
+            xn_i = cl_euler_step(
+                ol_scenarios[i].emb_system, xi_ref, u_k, ol_scenarios[i].p_interval, dt
+            )
+            xn_j = cl_euler_step(
+                ol_scenarios[j].emb_system, xj_ref, u_k, ol_scenarios[j].p_interval, dt
+            )
+
+            raw_cost = overlap_size_lax(
+                _obs_interval(xn_i, ol_scenarios[i]),
+                _obs_interval(xn_j, ol_scenarios[j]),
+            )
+            step_sep_cost = step_sep_cost + jnp.where(has_overlap, raw_cost, 0.0)
+            new_pxi_list.append(ivl_to_arr(xn_i))
+            new_pxj_list.append(ivl_to_arr(xn_j))
+
+        min_sep_cost = jnp.minimum(min_sep_cost, step_sep_cost)
+        new_carry = (x_next_arr, jnp.stack(new_pxi_list), jnp.stack(new_pxj_list),
+                     cbf_pen, min_sep_cost)
+        return new_carry, None
+
+    carry = (x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost)
+    for k in range(1, num_steps):
+        carry, _ = step_fn(carry, theta_seq[k])
+    _, _, _, cbf_pen_f, min_sep_f = carry
+    return min_sep_f + cbf_weight * cbf_pen_f
+
+
+def optimize_openloop_cbf_gpu(
+    x0_ivl: irx.Interval,
+    ol_scenarios: List[Scenario],
+    dt: float,
+    num_steps: int,
+    obstacles: jnp.ndarray,          # (N, 3) — [cx, cy, r_obs] per row
+    cbf_weight: float = 1.0,
+    num_restarts: int = 100,
+    learning_rate: float = 0.1,
+    num_iters: int = 200,
+    seed: int = 42,
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """GPU-parallel multi-start gradient descent for the open-loop separating controller.
+
+    Decision variable:  theta_seq ∈ R^{num_steps × 2}
+        Each row theta_k = [v_k, ω_k] — direct open-loop control input.
+        The same command is broadcast to all fault scenarios.
+
+    Actuation limits enforced by projection at each gradient step:
+        v  ∈ [-1.0,  1.0]  m/s
+        ω  ∈ [-0.15, 0.15] rad/s
+
+    Initialisation: small Gaussian noise around zero.
+
+    Returns
+    -------
+    (best_theta_seq, best_loss, all_theta_seq_final, all_losses)
+    best_theta_seq      : (num_steps, 2)  optimal per-step [v_k, ω_k]
+    best_loss           : scalar
+    all_theta_seq_final : (num_restarts, num_steps, 2)
+    all_losses          : (num_restarts,)
+    """
+    key    = jax.random.PRNGKey(seed)
+    noise  = jax.random.normal(key, (num_restarts, num_steps, 2)) * 0.1
+    theta0 = noise  # (num_restarts, num_steps, 2)
+
+    def loss_fn(theta_seq):
+        return ol_cbf_loss(
+            theta_seq,
+            x0_ivl=x0_ivl,
+            ol_scenarios=ol_scenarios,
+            dt=dt,
+            obstacles=obstacles,
+            cbf_weight=cbf_weight,
+        )
+
+    batched_loss = jax.vmap(loss_fn)
+    batched_grad = jax.vmap(jax.grad(loss_fn))
+
+    def body(_, theta_batch):
+        g = batched_grad(theta_batch)
+        return jnp.clip(theta_batch - learning_rate * g, _CL_U_LO_TRACK, _CL_U_HI_TRACK)
+
+    theta_final = jax.lax.fori_loop(0, num_iters, body, theta0)
+    losses      = batched_loss(theta_final)
+    best_idx    = jnp.argmin(losses)
+    best_theta  = theta_final[best_idx]   # (num_steps, 2)
+    best_loss   = losses[best_idx]
+    return best_theta, best_loss, theta_final, losses
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9.  Diagnostics
 # ══════════════════════════════════════════════════════════════════════════════
 
 def evaluate_controller(
