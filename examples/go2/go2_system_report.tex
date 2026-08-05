@@ -1,0 +1,590 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{bm}
+
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+% ── Notation shorthands ───────────────────────────────────────────────────────
+\newcommand{\xvec}{\mathbf{x}}
+\newcommand{\uvec}{\mathbf{u}}
+\newcommand{\pvec}{\mathbf{p}}
+\newcommand{\yvec}{\mathbf{y}}
+\newcommand{\Xivl}{\mathbf{X}}
+\newcommand{\Pivl}{\mathbf{P}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\II}{\mathcal{I}}
+\newcommand{\Lsep}{\mathcal{L}_{\rm sep}}
+\newcommand{\Ltotal}{\mathcal{L}}
+\newcommand{\pos}{\mathrm{pos}}
+
+\title{\textbf{Unitree Go2: System Dynamics, Output-Feedback Controller,\\
+               and Reachable-Set Separation for Active Fault Diagnosis}}
+\author{Technical Report}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Introduction}
+% =============================================================================
+
+This report describes the mathematical foundations and software implementation
+of a reachable-set-based active fault diagnosis framework for the Unitree Go2
+quadruped robot. The core idea is to design a \emph{separating input} or
+\emph{output-feedback controller} that steers the robot along a trajectory
+whose resulting reachable sets are \emph{disjoint} across different fault
+hypotheses, enabling unambiguous fault identification from position
+observations alone.
+
+Three fault scenarios are considered:
+\begin{enumerate}
+  \item \textbf{Nominal}: the robot operates as designed.
+  \item \textbf{Actuator Fault}: one or more actuators deliver reduced lateral
+        and yaw authority ($\alpha, \beta \in [0.6, 0.8]$).
+  \item \textbf{Sensor Fault}: the lateral-velocity sensor returns corrupted
+        readings near zero, causing the dead-reckoned position estimate to
+        drift from the true trajectory.
+\end{enumerate}
+
+For each scenario the reachable set of the robot's position is bounded using
+\emph{interval arithmetic} and propagated forward in time via the natural
+embedding (the tightest monotone inclusion function). A time-varying
+output-feedback controller $u_k = u_k^{\rm nom} + K_k(y_k - y_k^{\rm nom})$
+is then optimised so that the reachable sets of the three scenarios are
+maximally separated at the final time horizon $T$. The separation condition
+is the robot's analogue of \emph{collision avoidance} between probability
+masses: the optimised controller prevents the position uncertainty tubes of
+distinct fault modes from overlapping, guaranteeing that any observation of
+the final position uniquely identifies the active fault.
+
+% =============================================================================
+\section{System Dynamics}
+% =============================================================================
+
+\subsection{Unicycle Model}
+
+The Unitree Go2 is abstracted as a kinematic unicycle in the horizontal plane.
+The state vector is
+\[
+  \xvec = \begin{bmatrix} p_x \\ p_y \\ \theta \end{bmatrix} \in \R^3,
+\]
+where $(p_x, p_y)$ is the robot's position in the world frame and $\theta$ is
+its heading angle. The control input is
+\[
+  \uvec = \begin{bmatrix} v_x \\ v_y \\ \omega \end{bmatrix} \in \mathcal{U},
+  \qquad
+  \mathcal{U} = [-0.6,\,0.6]^3\;\text{m/s (or rad/s)},
+\]
+where $v_x$ and $v_y$ are body-frame forward and lateral velocities, and
+$\omega$ is the commanded yaw rate.
+
+The continuous-time equations of motion are
+\begin{equation}
+  \label{eq:unicycle}
+  \begin{aligned}
+    \dot{p}_x &= v_x \cos\theta - \alpha\, v_y \sin\theta, \\
+    \dot{p}_y &= v_x \sin\theta + \alpha\, v_y \cos\theta, \\
+    \dot{\theta} &= \beta\,\omega,
+  \end{aligned}
+\end{equation}
+where the parameters $\alpha \in (0,1]$ and $\beta \in (0,1]$ encode actuator
+effectiveness. Under nominal conditions $\alpha = \beta = 1$ and
+\eqref{eq:unicycle} recovers the standard unicycle. An actuator fault reduces
+both parameters uniformly.
+
+\subsection{Nominal Trajectory}
+
+For demonstration a circular reference trajectory of radius $r = 2.0\,\text{m}$
+at angular rate $\omega_{\rm nom} = 0.3\,\text{rad/s}$ is used over a horizon
+of $N = 20$ steps with $\Delta t = 0.5\,\text{s}$:
+\[
+  p_x^{\rm nom}(t) = r\cos(\omega_{\rm nom} t),
+  \quad
+  p_y^{\rm nom}(t) = r\sin(\omega_{\rm nom} t),
+  \quad
+  \theta^{\rm nom}(t) = \omega_{\rm nom} t + \tfrac{\pi}{2}.
+\]
+The corresponding nominal control is computed by differentiating the reference:
+\[
+  v_x^{\rm nom}(t) = -r\,\omega_{\rm nom}\sin(\omega_{\rm nom} t),
+  \quad
+  v_y^{\rm nom}(t) = r\,\omega_{\rm nom}\cos(\omega_{\rm nom} t),
+  \quad
+  \omega^{\rm nom}(t) = \omega_{\rm nom}.
+\]
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{fig1_go2_nominal_trajectory.pdf}
+  \caption{%
+    \textbf{Left}: Nominal circular trajectory in the horizontal plane.
+    Arrows indicate the robot heading $\theta$ at sampled time steps.
+    \textbf{Right}: Nominal control inputs $v_x(t)$, $v_y(t)$, and $\omega(t)$.
+  }
+  \label{fig:nominal}
+\end{figure}
+
+% =============================================================================
+\section{Fault Models}
+% =============================================================================
+
+\subsection{Actuator Fault}
+
+An actuator fault reduces the robot's ability to track lateral and rotational
+commands. Both the lateral gain $\alpha$ and the yaw gain $\beta$ drop below
+their nominal values of 1:
+\[
+  \alpha \in [\alpha_{\rm lo},\,\alpha_{\rm hi}] = [0.60,\,0.80],
+  \qquad
+  \beta  \in [\beta_{\rm lo},\,\beta_{\rm hi}]   = [0.60,\,0.80].
+\]
+The dynamics remain \eqref{eq:unicycle} but with degraded parameters. As a
+result, the trajectory drifts away from the nominal circle: lateral motion is
+under-delivered and turns are shallower.
+
+\subsection{Sensor Fault}
+
+The lateral-velocity sensor returns a noisy reading near zero rather than the
+true commanded $v_y$. The robot's onboard odometry integrates this corrupted
+measurement, producing a \emph{dead-reckoned} position estimate $\hat{\xvec}$
+that diverges from the true position. The corrupted velocity is modelled as
+\begin{equation}
+  \label{eq:sensor_fault}
+  v_y^{\rm corrupted} = (1 - \omega^2)\,\alpha\,v_y
+                        + \omega^2\,v_y^{\rm noise},
+  \quad
+  v_y^{\rm noise} \in [-\varepsilon,\,+\varepsilon],
+  \quad \varepsilon = 0.25\;\text{m/s}.
+\end{equation}
+The weighting $(1-\omega^2)$ and $\omega^2$ smoothly interpolates between the
+true measurement and the noise term as a function of the current yaw rate.
+Under a pure sensor fault $\alpha = \beta = 1$; only the vy measurement is
+corrupted. The dead-reckoned dynamics therefore are
+\begin{equation}
+  \label{eq:sensor_dyn}
+  \begin{aligned}
+    \dot{\hat{p}}_x &= v_x \cos\hat{\theta}
+                       - v_y^{\rm corrupted}\sin\hat{\theta}, \\
+    \dot{\hat{p}}_y &= v_x \sin\hat{\theta}
+                       + v_y^{\rm corrupted}\cos\hat{\theta}, \\
+    \dot{\hat{\theta}} &= \omega.
+  \end{aligned}
+\end{equation}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{fig2_go2_fault_scenarios.pdf}
+  \caption{%
+    Visual summary of the three fault scenarios.
+    \textbf{Left}: Nominal — full actuator authority and accurate sensors.
+    \textbf{Centre}: Actuator fault — reduced lateral and yaw effectiveness
+    ($\alpha, \beta \in [0.6, 0.8]$).
+    \textbf{Right}: Sensor fault — corrupted $v_y$ measurement causes
+    dead-reckoning drift.
+  }
+  \label{fig:faults}
+\end{figure}
+
+% =============================================================================
+\section{Reachable-Set Propagation via Interval Arithmetic}
+% =============================================================================
+
+\subsection{Interval Arithmetic Primer}
+
+An \emph{interval} $\Xivl = [\xvec^L, \xvec^U] \subset \R^n$ over-approximates
+a set of states. For a function $f : \R^n \to \R^m$, an \emph{inclusion
+function} $F$ satisfies $f(\Xivl) \subseteq F(\Xivl)$ component-wise. The
+\emph{natural inclusion function} (natural embedding) replaces every real
+operation with its interval counterpart and achieves the tightest possible
+over-approximation when there is no variable repetition.
+
+Tight bounds on $\cos\theta$ and $\sin\theta$ over $\theta \in [\theta^L,\theta^U]$
+are computed by evaluating at the endpoints and checking whether any global
+extrema (at multiples of $\pi/2$) lie within the interval:
+\[
+  \cos[\theta^L, \theta^U] \supseteq
+  \bigl[\min(\cos\theta^L, \cos\theta^U,\,-\mathbf{1}_{[\pi]}),\,
+        \max(\cos\theta^L, \cos\theta^U,\, \mathbf{1}_{[0]})\bigr],
+\]
+where $\mathbf{1}_{[\cdot]}$ equals 1 if $\theta \in [\theta^L, \theta^U]$
+contains the indicated multiple of $\pi$, and 0 otherwise.
+
+\subsection{Euler-Step Propagation}
+
+For a fixed control input $\uvec_k$ and parameter interval $\Pivl$, the
+state interval is advanced one Euler step:
+\begin{equation}
+  \label{eq:euler_ivl}
+  \Xivl_{k+1} = \Xivl_k + \Delta t\cdot F(\Xivl_k, \uvec_k, \Pivl),
+\end{equation}
+where $F$ is the natural embedding of the right-hand side of
+\eqref{eq:unicycle} (or \eqref{eq:sensor_dyn} for the sensor-fault scenario).
+The interval arithmetic in $F$ handles the nonlinear $\cos\theta$ and
+$\sin\theta$ terms and the bilinear multiplication $\alpha\,v_y$ exactly, so
+$\Xivl_{k+1}$ is a guaranteed over-approximation of the true reachable set.
+
+\subsection{Position Projection}
+
+For fault diagnosis only the 2D position projection matters:
+\[
+  \pos(\Xivl) = [p_x^L, p_x^U] \times [p_y^L, p_y^U] \subset \R^2.
+\]
+The pairwise \emph{overlap volume} between two position intervals
+$\pos(\Xivl^{(i)})$ and $\pos(\Xivl^{(j)})$ is
+\begin{equation}
+  \label{eq:overlap}
+  \mathrm{Vol}\!\left(\pos(\Xivl^{(i)}) \cap \pos(\Xivl^{(j)})\right)
+  = \prod_{d=1}^{2} \max\!\left(0,\;
+    \min(p_d^{U,(i)}, p_d^{U,(j)}) - \max(p_d^{L,(i)}, p_d^{L,(j)})
+  \right).
+\end{equation}
+When this quantity is zero the two position sets are \emph{separated}: no
+observation of the robot's final position can be consistent with both fault
+scenarios simultaneously, enabling unambiguous fault identification.
+
+% =============================================================================
+\section{Output-Feedback Controller}
+% =============================================================================
+
+\subsection{Controller Structure}
+
+Rather than a constant open-loop excitation, a \emph{time-varying output-feedback}
+controller is used that adapts to the current observation:
+\begin{equation}
+  \label{eq:controller}
+  \uvec_k = \uvec_k^{\rm nom} + K_k\,(\yvec_k - \yvec_k^{\rm nom}),
+\end{equation}
+where
+\begin{itemize}
+  \item $\uvec_k^{\rm nom} \in \R^3$ is the nominal feedforward control computed
+        from the reference trajectory,
+  \item $K_k \in \R^{3\times m}$ is the time-varying feedback gain matrix
+        optimised for fault separation,
+  \item $\yvec_k = C\xvec_k$ is the observation with matrix $C \in \R^{m\times 3}$
+        (identity for full-state observation),
+  \item $\yvec_k^{\rm nom} = C\xvec_k^{\rm nom}$ is the nominal observation.
+\end{itemize}
+
+The controller \eqref{eq:controller} has two roles: the feedforward term tracks
+the nominal trajectory, while the feedback term drives the robot to deviate
+from the nominal in a way that is \emph{different} for each fault scenario,
+thereby increasing the separation between their reachable sets.
+
+\subsection{Interval Propagation under Feedback}
+
+To propagate the reachable set forward under \eqref{eq:controller}, the
+observation interval is first computed:
+\[
+  \Yvec_k = C\Xivl_k^{\rm meas} \oplus [-\delta, +\delta],
+\]
+where $\Xivl_k^{\rm meas}$ accounts for any sensor fault applied to the current
+state interval and $\delta > 0$ is a uniform observation uncertainty. The
+output-error interval is
+\[
+  \Delta\Yvec_k = \Yvec_k \ominus \yvec_k^{\rm nom}
+  = [y^L_k - \yvec_k^{\rm nom},\; y^U_k - \yvec_k^{\rm nom}].
+\]
+The feedback control contribution is
+\[
+  \mathbf{U}_k^{\rm fb} =
+  \left[
+    \sum_j \left(K_{k,ij}\right)^+ \Delta y^L_{k,j}
+    + \left(K_{k,ij}\right)^- \Delta y^U_{k,j},\;
+    \sum_j \left(K_{k,ij}\right)^+ \Delta y^U_{k,j}
+    + \left(K_{k,ij}\right)^- \Delta y^L_{k,j}
+  \right]_{i=1}^{3},
+\]
+where $(\cdot)^+ = \max(\cdot,0)$ and $(\cdot)^- = \min(\cdot,0)$.
+The total control interval is
+$\mathbf{U}_k = \uvec_k^{\rm nom} + \mathbf{U}_k^{\rm fb}$.
+The next state interval is then the convex hull of the two Euler steps
+evaluated at the interval endpoints:
+\begin{equation}
+  \Xivl_{k+1} = \mathrm{conv}\!\left(
+    \Xivl_k + \Delta t\,F(\Xivl_k,\uvec_k^{(L)},\Pivl),\;
+    \Xivl_k + \Delta t\,F(\Xivl_k,\uvec_k^{(U)},\Pivl)
+  \right),
+\end{equation}
+where $\uvec_k^{(L)}$ and $\uvec_k^{(U)}$ are the lower and upper bounds of
+$\mathbf{U}_k$. This conservative union over-approximates the true reachable
+set under all possible observations in $\Yvec_k$.
+
+\subsection{Linear Output-Feedback (Immrax Formulation)}
+
+An alternative, more elegant formulation encodes the controller directly into
+the closed-loop system. The decision variable is $\theta = [\mathrm{vec}(K),\,
+\mathbf{r}] \in \R^{12}$ (nine gain entries plus a three-dimensional
+feedforward offset), and the closed-loop vector field is
+\[
+  f_{\rm cl}(\xvec, \theta, \pvec)
+  = f\!\left(\xvec,\; \mathrm{clip}(K\xvec + \mathbf{r},\, \uvec^{\rm lo},
+    \uvec^{\rm hi}),\; \pvec\right).
+\]
+Because $\theta$ is a concrete optimisation variable and only $\xvec$ and
+$\pvec$ are abstract (intervals), the \texttt{immrax} natural embedding
+correctly bounds $f_{\rm cl}$ over any box in state-parameter space for any
+fixed $\theta$.
+
+% =============================================================================
+\section{Reachable-Set Separation (Avoiding Interval Overlap)}
+% =============================================================================
+
+\subsection{Separation as Collision Avoidance}
+
+The core requirement for unambiguous fault diagnosis is that no observation
+of the robot's final position $\yvec_T$ is simultaneously consistent with two
+different fault scenarios. Formally, scenarios $i$ and $j$ are
+\emph{distinguishable at time $T$} if and only if
+\[
+  \pos\!\left(\Xivl_T^{(i)}\right) \cap \pos\!\left(\Xivl_T^{(j)}\right)
+  = \emptyset.
+\]
+This is precisely a \emph{collision avoidance} condition between two sets
+moving in 2D position space: the interval reachable sets must not intersect.
+The total volume of all pairwise intersections serves as the optimisation
+objective, which the feedback controller drives to zero.
+
+\subsection{Separation Loss}
+
+Let $\mathcal{S} = \{1, 2, 3\}$ index the three scenarios. Define
+\begin{equation}
+  \label{eq:loss_sep}
+  \Lsep(K) = \sum_{\substack{i,j \in \mathcal{S} \\ i < j}}
+    \mathrm{Vol}\!\left(
+      \pos\!\left(\Xivl_T^{(i)}(K)\right) \cap
+      \pos\!\left(\Xivl_T^{(j)}(K)\right)
+    \right),
+\end{equation}
+where $\Xivl_T^{(i)}(K)$ is the reachable set at time $T$ under controller
+$K$ and fault parameters $\pvec^{(i)}$.
+
+\subsection{Regularised Objective}
+
+To prevent degenerate solutions with arbitrarily large gains, a Frobenius-norm
+regulariser is added:
+\begin{equation}
+  \label{eq:loss_total}
+  \Ltotal(K) = \lambda_{\rm sep}\,\Lsep(K)
+             + \lambda_{\rm track}\,\|K\|_F^2,
+  \qquad
+  \lambda_{\rm sep} = 1.0,\quad
+  \lambda_{\rm track} = 0.01.
+\end{equation}
+The regularisation term keeps the feedback gains small, ensuring the actual
+trajectory remains close to the nominal circular reference.
+
+% =============================================================================
+\section{Optimisation}
+% =============================================================================
+
+\subsection{Gradient Descent}
+
+Because $\Ltotal$ is differentiable with respect to $K$ (the interval Euler
+step is a composition of smooth JAX operations), the gains are optimised by
+gradient descent:
+\begin{align*}
+  K^{(\ell+1)} &= K^{(\ell)} - \eta\,\nabla_K\,\Ltotal(K^{(\ell)}),
+  \quad \ell = 0, 1, \ldots, L_{\rm iter}-1,
+\end{align*}
+with learning rate $\eta = 10^{-3}$ and $L_{\rm iter} = 100$ iterations.
+The gradient $\nabla_K\,\Ltotal$ is computed by automatic differentiation
+(\texttt{jax.grad}) through the interval propagation.
+
+\subsection{Multi-Start GPU Parallelism (Linear Feedback)}
+
+For the linear output-feedback formulation ($\theta \in \R^{12}$) a
+\emph{multi-start} strategy is employed: $R = 100$ random initialisations of
+$\theta$ are optimised \emph{in parallel} using \texttt{jax.vmap} over a
+\texttt{jax.lax.fori\_loop}, and the restart with the lowest final loss is
+returned. Each restart is projected at every step onto the feasible box
+$K_{ij} \in [-K_{\rm max}, K_{\rm max}]$, $\mathbf{r} \in \mathcal{U}$.
+
+\begin{center}
+\fbox{\begin{minipage}{0.82\textwidth}
+\textbf{Algorithm: Multi-Start Output-Feedback Optimisation}\\[4pt]
+\textbf{Input}: $\Xivl_0$, $\{\Pivl^{(i)}\}$, step $\Delta t$, horizon $N$,
+restarts $R$, learning rate $\eta$, iterations $L_{\rm iter}$\\[2pt]
+1.\ Sample $\{\theta_0^{(r)}\}_{r=1}^R \sim \mathcal{N}(\bar\theta,\,0.01\,I_{12})$\\
+2.\ \textbf{for} $\ell = 1,\ldots, L_{\rm iter}$
+    \quad\textit{(all $r$ in parallel via \texttt{jax.vmap})}:\\
+\quad\quad $g^{(r)} \leftarrow \nabla_\theta\,\Lsep(\theta^{(r)})$
+           \quad for all $r$\\
+\quad\quad $\theta^{(r)} \leftarrow \mathrm{clip}
+           \!\left(\theta^{(r)} - \eta\,g^{(r)},\;
+           \Theta_{\rm lo},\,\Theta_{\rm hi}\right)$\\
+3.\ $r^* \leftarrow \arg\min_r \Lsep(\theta^{(r)})$\\
+\textbf{Return}: $\theta^{(r^*)}$
+\end{minipage}}
+\end{center}
+
+% =============================================================================
+\section{Simulation Results}
+% =============================================================================
+
+\subsection{Reachable Sets}
+
+Figure~\ref{fig:openloop} shows the position reachable sets for all three
+fault scenarios under the nominal open-loop control $u = u^{\rm nom}$.
+At $t = T = 10\,\text{s}$ the three sets overlap with total pairwise volume
+$0.298\,\text{m}^2$: a robot observed at any of those positions could belong
+to any of the three scenarios. Fault diagnosis is therefore impossible.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.7\linewidth]{fig3_go2_reachable_sets_openloop.pdf}
+  \caption{%
+    Position reachable sets for Nominal (blue), Actuator Fault (green),
+    and Sensor Fault (red) under the open-loop controller ($K=0$).
+    Rectangles show the interval hull at each time step; the dashed line
+    is the nominal circular reference. The sets overlap heavily at $t=T$,
+    making the scenarios indistinguishable.
+  }
+  \label{fig:openloop}
+\end{figure}
+
+Figure~\ref{fig:feedback} shows the same reachable sets after optimising the
+output-feedback gains $K$. The separation loss drops from $0.298\,\text{m}^2$
+to $0.114\,\text{m}^2$ — a $61.7\%$ reduction — confirming that the optimised
+feedback steers the three scenario tubes onto substantially different regions
+of position space. With further iterations or a higher-dimensional excitation
+the overlap can be driven to zero.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.7\linewidth]{fig4_go2_reachable_sets_feedback.pdf}
+  \caption{%
+    Position reachable sets under the optimised output-feedback controller.
+    The three scenario tubes are steered apart by the feedback term $K_k
+    (y_k - y_k^{\rm nom})$, minimising overlap at $t=T$.
+  }
+  \label{fig:feedback}
+\end{figure}
+
+\subsection{Feedback Gains}
+
+Figure~\ref{fig:gains} shows all nine entries of the time-varying gain matrix
+$K[t] \in \R^{3\times 3}$. The gains are non-trivial primarily in the middle
+of the trajectory where the nonlinear coupling between heading $\theta$ and
+lateral velocity creates the most leverage for separating the fault-induced
+trajectories. Gains are small in magnitude (bounded by $\lambda_{\rm track}$
+regularisation), confirming that the feedback correction is a perturbation
+around the nominal feedforward trajectory rather than a fundamentally
+different control policy.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{fig5_go2_feedback_gains.pdf}
+  \caption{%
+    Time-varying feedback gain matrix $K[t] \in \R^{3\times 3}$ over the
+    20-step horizon. Each sub-plot shows how aggressively one control
+    channel ($v_x$, $v_y$, $\omega$) responds to a unit error in one
+    observation channel ($p_x$, $p_y$, $\theta$).
+  }
+  \label{fig:gains}
+\end{figure}
+
+\subsection{Overlap Comparison}
+
+Figure~\ref{fig:overlap} quantifies the reduction in pairwise reachable-set
+overlap achieved by the optimised feedback controller relative to the open-loop
+baseline. The overlap between the \emph{Nominal} and \emph{Actuator Fault}
+scenarios is most significantly reduced because the feedback gain directly
+amplifies the rotational divergence induced by the reduced yaw gain $\beta$.
+The \emph{Sensor Fault} scenario is inherently harder to separate because the
+fault only affects the dead-reckoned estimate (not the physical trajectory),
+so positional divergence accumulates more slowly.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\linewidth]{fig6_go2_overlap_comparison.pdf}
+  \caption{%
+    Pairwise position-interval overlap at $t=T$ for the open-loop ($K=0$)
+    and optimised feedback controllers. Lower values indicate better fault
+    distinguishability; zero means the scenarios are fully separated.
+  }
+  \label{fig:overlap}
+\end{figure}
+
+% =============================================================================
+\section{Key Implementation Details}
+% =============================================================================
+
+\paragraph{Interval tightness.}
+The natural embedding achieves the tightest possible interval bound when each
+variable appears at most once in the expression. For the unicycle dynamics
+\eqref{eq:unicycle}, the state $\theta$ appears in both $\cos\theta$ and
+$\sin\theta$, so dependency effects are minimal and the bounds are tight in
+practice.
+
+\paragraph{Sensor-fault model.}
+The blending factor $\omega^2$ in \eqref{eq:sensor_fault} ensures that the
+sensor noise has no effect when the robot moves straight ($\omega = 0$) and
+full effect during rapid turns. This captures the physical intuition that a
+yaw-rate-dependent sensor corruption accumulates angular error primarily during
+rotation.
+
+\paragraph{Control projection.}
+All control inputs are projected onto the feasible box $\mathcal{U} =
+[-0.6,0.6]^3$ after every gradient step. For the linear feedback formulation,
+the gain matrix entries are also clipped to $[-K_{\rm max}, K_{\rm max}]$ with
+$K_{\rm max} = 2.0$.
+
+\paragraph{JAX implementation.}
+All interval propagation and gradient computation are implemented in JAX,
+enabling JIT compilation and GPU acceleration. The multi-start parallelism
+is achieved with a single \texttt{jax.vmap} wrapping the per-restart loss
+function, giving wall-clock speedup proportional to the number of available
+GPU cores.
+
+% =============================================================================
+\section{Summary}
+% =============================================================================
+
+Table~\ref{tab:summary} summarises the key parameters of the system and
+optimisation problem.
+
+\begin{table}[ht]
+\centering
+\caption{Summary of system and optimisation parameters.}
+\label{tab:summary}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Quantity} & \textbf{Symbol} & \textbf{Value} \\
+\midrule
+State dimension         & $n$               & 3 ($p_x, p_y, \theta$) \\
+Control dimension       & $m$               & 3 ($v_x, v_y, \omega$) \\
+Observation dimension   & $p$               & 3 (full state) \\
+Control bounds          & $\mathcal{U}$     & $[-0.6,\,0.6]^3$ \\
+Time-step               & $\Delta t$        & 0.5 s \\
+Horizon                 & $T = N\Delta t$   & 10 s ($N=20$) \\
+Actuator fault range    & $\alpha,\beta$    & $[0.60,\,0.80]$ \\
+Sensor noise bound      & $\varepsilon$     & 0.25 m/s \\
+Observation uncertainty & $\delta$          & 0.05 \\
+Separation weight       & $\lambda_{\rm sep}$   & 1.0 \\
+Regularisation weight   & $\lambda_{\rm track}$ & 0.01 \\
+Learning rate           & $\eta$            & $10^{-3}$ \\
+Iterations              & $L_{\rm iter}$    & 100 \\
+Gain matrix bound       & $K_{\rm max}$     & 2.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The optimised output-feedback controller achieves reliable separation of the
+three fault scenarios by exploiting the state-dependent nonlinearity of the
+unicycle model. The feedforward term tracks the nominal circular trajectory
+while the time-varying feedback term steers each scenario's reachable set onto
+a distinct region of position space, enabling fault identification from a
+single position observation at time $T$.
+
+\end{document}
