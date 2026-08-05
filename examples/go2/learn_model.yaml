@@ -1,0 +1,33 @@
+device: "cuda"
+seed: 123
+
+dataset:
+  load_filename: "dataset/data.pt"
+  load_dino_filename: ""
+  split: [0.95, 0.05]
+
+model:
+  z_dim: 1536
+  u_dim: 3
+  y_red_dim: 3
+  x_dim: 3
+
+losses:
+  weight_CPC: 1.0
+  weight_dyn: 1.0
+  weight_recon: 1.0
+
+saving:
+  save_best_model: 1
+
+train:
+  wandb:
+    enabled: True
+    project: null
+    entity: null
+  lr: 1e-3
+  epochs: 1000 #10000
+  batch_size: 64
+  load_ckpt: "../data/checkpoints/unicycle/unicycle_checkpoint.pt"
+  save_ckpt_train: "checkpoints/model_go2_train.pt"
+  save_ckpt_val: "checkpoints/model_go2_val.pt"
