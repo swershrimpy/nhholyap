@@ -183,7 +183,7 @@ def create_scenarios(
             ),
         ),
         Scenario(
-            name="Actuator and Sensor Fault",
+            name="Simultaneous Fault",
             emb_system=_SF_EMB,
             p_interval=irx.Interval(
                 lower=jnp.array([-sensor_noise_bound, actuator_alpha_lo/2, actuator_beta_low/2]),
@@ -227,6 +227,11 @@ def propagate_scenario(x0_ivl: irx.Interval, u: jnp.ndarray,
     emb = scenario.emb_system
     p   = scenario.p_interval
 
+    # jax.checkpoint prevents the embedding's internal intermediate values
+    # from being stored across loop steps during reverse-mode AD.  Only the
+    # carry state (6 floats) is kept at each step boundary; the embedding ops
+    # (~200 floats) are recomputed on the backward sweep.
+    @jax.checkpoint
     def body(i, x_carry):
         return euler_step(emb, x_carry, u, p, dt)
 
@@ -242,13 +247,24 @@ def _propagate_history(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     (num_segments, state_dim) — one slice per segment end.
     Designed to be vmapped over p_ivl to parallelise across scenarios that
     share the same emb_sys.
+
+    Memory note: two levels of gradient checkpointing are applied.
+    - jax.checkpoint on euler_body: prevents storing ~200 embedding
+      intermediates per Euler step; only the 6-float carry is retained at
+      each step boundary.
+    - jax.checkpoint on segment (scan body): prevents lax.scan from
+      accumulating K copies of each segment's fori_loop residuals; instead
+      each segment is recomputed once during the backward sweep.
+    Combined, peak gradient memory scales as O(N × state_dim) per (restart,
+    scenario) instead of O(K × N × embedding_ops).
     """
     def segment(x_ivl, u_k):
+        @jax.checkpoint
         def euler_body(_, x): return euler_step(emb_sys, x, u_k, p_ivl, dt)
         x_end = jax.lax.fori_loop(0, steps_per_segment, euler_body, x_ivl)
         return x_end, x_end   # carry, stacked output
 
-    _, x_hist = jax.lax.scan(segment, x0_ivl, u_seq)
+    _, x_hist = jax.lax.scan(jax.checkpoint(segment), x0_ivl, u_seq)
     return x_hist   # Interval: lower/upper shape (num_segments, state_dim)
 
 
