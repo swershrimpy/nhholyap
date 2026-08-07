@@ -155,14 +155,6 @@ def _run_unrolled_or_loop_nocheckpoint(step_fn, init, n: int):
     return carry
 
 
-def _plain_unroll(step_fn, init, n: int):
-    """Bare Python-unrolled loop, no checkpoint, no scan. Ported verbatim."""
-    carry = init
-    for i in range(n):
-        carry = step_fn(carry, i)
-    return carry
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # 0.  Timing / Memory Helper
 # ══════════════════════════════════════════════════════════════════════════════
@@ -474,10 +466,24 @@ def _propagate_history(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
                        emb_sys, p_ivl: irx.Interval,
                        dt: float, steps_per_segment: int) -> irx.Interval:
     """Propagate and record the state interval at the end of every segment.
-    Returns an irx.Interval whose lower/upper have shape (num_segments, 12)."""
+    Returns an irx.Interval whose lower/upper have shape (num_segments, 12).
+
+    Compile-cost note: the within-segment step loop uses jax.lax.scan, NOT
+    a Python-unrolled loop the way nonlinear_chain_separating_input.py's
+    version does (`_plain_unroll`). That's fine there since dynamics are
+    cheap to unroll; here, this system's trig-heavy embedding makes even a
+    handful of unrolled steps expensive to compile (measured: 5 unrolled
+    steps ~56s/4.3GB elsewhere in this module -- see module docstring
+    "Performance note"), so `steps_per_segment` -- e.g. 50 steps for a
+    0.5s segment at dt=0.01 -- MUST be scanned, not unrolled, to stay
+    compile-tractable. Segments themselves were already scanned (the outer
+    jax.lax.scan below); this makes the whole function's compile cost
+    ~independent of both steps_per_segment and num_segments.
+    """
     def segment(x_ivl, u_k):
-        def step(x, _i): return euler_step(emb_sys, x, u_k, p_ivl, dt)
-        x_end = _plain_unroll(step, x_ivl, steps_per_segment)
+        def step(x_carry, _):
+            return euler_step(emb_sys, x_carry, u_k, p_ivl, dt), None
+        x_end, _ = jax.lax.scan(step, x_ivl, xs=None, length=steps_per_segment)
         return x_end, x_end
 
     _, x_hist = jax.lax.scan(jax.checkpoint(segment), x0_ivl, u_seq)
@@ -497,7 +503,18 @@ def propagate_scenario_multistep(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
 def separation_loss_multistep(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
                               scenarios: List[Scenario], dt: float,
                               steps_per_segment: int) -> jnp.ndarray:
-    """Min over segments of the pairwise state-interval overlap sum."""
+    """Min over segments of the pairwise state-interval overlap sum.
+
+    Compile-cost note: the pairwise-overlap-at-every-segment computation is
+    fully vectorized (gather over precomputed pair indices + jax.vmap over
+    the segment axis), NOT a Python double loop over (segments x pairs) the
+    way nonlinear_chain_separating_input.py's version is. That Python-loop
+    form is cheap for nonlinear_chain's polynomial dynamics but, combined
+    with this system's expensive-to-differentiate trig terms, made even
+    num_segments=10 fail to compile in 90s here. Vectorizing brings
+    num_segments=100 (a 1s horizon at dt=0.01) down to compile in line with
+    num_segments=5 -- see module docstring "Performance note".
+    """
     num_segments = u_seq.shape[0]
     n = len(scenarios)
     emb_sys = scenarios[0].emb_system
@@ -513,18 +530,20 @@ def separation_loss_multistep(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
     # x_hist_batch: Interval with lower/upper shape (n, num_segments, 12)
     x_hist_batch = jax.vmap(prop_one)(p_batch)
 
-    def overlap_at_k(k):
-        x_ivls_k = [
-            irx.Interval(lower=x_hist_batch.lower[i, k], upper=x_hist_batch.upper[i, k])
-            for i in range(n)
-        ]
-        total = jnp.array(0.0)
-        for i in range(n):
-            for j in range(i + 1, n):
-                total = total + _overlap_volume(x_ivls_k[i], x_ivls_k[j])
-        return total
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    i_idx = jnp.array([i for i, j in pairs])
+    j_idx = jnp.array([j for i, j in pairs])
 
-    segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
+    def overlap_at_k(k):
+        # Gather every pair's (i, j) state interval at segment k at once
+        # (shape (n_pairs, 12)) instead of a Python loop over pairs.
+        lower_i, upper_i = x_hist_batch.lower[i_idx, k], x_hist_batch.upper[i_idx, k]
+        lower_j, upper_j = x_hist_batch.lower[j_idx, k], x_hist_batch.upper[j_idx, k]
+        widths = jnp.maximum(jnp.minimum(upper_i, upper_j) - jnp.maximum(lower_i, lower_j), 0.0)
+        return jnp.sum(jnp.prod(widths, axis=-1))
+
+    # vmap over segments instead of a Python loop over range(num_segments).
+    segment_overlaps = jax.vmap(overlap_at_k)(jnp.arange(num_segments))
     return jnp.min(segment_overlaps)
 
 
