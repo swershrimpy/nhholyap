@@ -124,16 +124,17 @@ class TestCubicChainSystemDynamics:
         sys_b, _ = get_system_and_embedding(3, a2, b2)
         assert sys_a is not sys_b
 
-    def test_t_must_be_jax_array_not_python_float(self):
-        """Regression guard: Python-float t breaks natif_jaxpr's invar count."""
+    def test_t_python_float_matches_jax_array(self):
+        """Python-float and 0-d jax-array t must agree (fixed upstream in
+        immrax 0.3.6 / jax 0.6.2; used to break natif_jaxpr's invar count)."""
         a, b = default_channel_params(2)
         _, emb = get_system_and_embedding(2, a, b)
         x_ut = irx.i2ut(small_ivl(2))
         u = jnp.full(2, 0.5)
         p_ivl = irx.icentpert(jnp.ones(2), jnp.zeros(2))
-        emb.f(jnp.zeros(()), x_ut, u, p_ivl)
-        with pytest.raises(Exception):
-            emb.f(0.0, x_ut, u, p_ivl)
+        r_array = emb.f(jnp.zeros(()), x_ut, u, p_ivl)
+        r_float = emb.f(0.0, x_ut, u, p_ivl)
+        assert jnp.allclose(jnp.asarray(r_array), jnp.asarray(r_float))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
