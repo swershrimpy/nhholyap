@@ -179,7 +179,7 @@ def time_jit(fn, *args, **kwargs):
     compile_time_s = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    out = jitted_fn(*args, **kwargs)
+    out = jax.block_until_ready(jitted_fn(*args, **kwargs))
     run_time_s = time.perf_counter() - t0
 
     del out
