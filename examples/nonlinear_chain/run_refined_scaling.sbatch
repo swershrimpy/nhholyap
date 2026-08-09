@@ -42,12 +42,12 @@
 #     <repo>/envs/immrax/bin/python -m pip install "immrax[cuda]" pytest
 #
 # Override directives on the CLI (CLI flags beat #SBATCH lines):
-#   sbatch -A gts-scoogan3 --time=05:00:00 run_refined_scaling.sbatch
+#   sbatch -A gts-scoogan3-fy20phase3 --time=05:00:00 run_refined_scaling.sbatch
 #
 # Env-var config (optional): CONDA_ENV=<repo>/envs/immrax
 # =============================================================================
 #SBATCH --job-name=nlchain-refined
-#SBATCH --account=gts-scoogan3
+#SBATCH --account=gts-scoogan3-fy20phase3
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
