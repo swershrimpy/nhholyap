@@ -97,20 +97,29 @@ X0_CENTERS = [
     (0.5, -0.3, 1.0),
     (-0.2, 0.4, -0.8),
 ]
-X0_WIDTHS = [0.02, 0.15]                        # small vs. large initial uncertainty
+X0_WIDTHS = [round(0.02 + 0.01 * i, 2) for i in range(14)]   # 0.02, 0.03, ..., 0.15
 ACTUATOR_RANGES = [(0.0, 0.5), (0.35, 0.65)]     # wide (easy) vs. narrow (hard) fault band
-SENSOR_SEVERITIES = [                            # (offset_xy, scale) -- moderate vs. subtle
+SENSOR_SEVERITIES = [                            # (offset_xy, scale)
     ((0.2, 0.2), 0.95),
-    ((0.03, 0.03), 0.99),
+    # ((0.03, 0.03), 0.99) -- dropped: this near-identity sensor map (offset
+    # 3cm, scale 0.99) was found to be outright inseparable from Nominal --
+    # every method hit a hard loss floor (~1e-4 to 2e-3, no restart-to-
+    # restart variance) with 0/12 successes even at the widened 5s horizon
+    # below, not an optimizer/threshold issue -- see success_rate_analysis
+    # investigation notes in project memory.
 ]
 
 SUCCESS_THRESHOLD = 1e-6   # m^2; loss below this counts as "fully separated"
 
-# Shared horizon across the WHOLE sweep (must be static -- see module docstring)
-DT = 0.1
-SINGLE_STEP_NUM_STEPS = 8
-UNREFINED_STEPS_PER_SEGMENT, UNREFINED_NUM_SEGMENTS = 2, 10
-REFINED_NUM_STEPS = 8
+# Shared horizon across the WHOLE sweep (must be static -- see module docstring).
+# 5s total for every method: single-step gets ONE control decision held
+# constant for the whole horizon; both multistep methods get 10 independent
+# control decisions, one per dt=0.5 step (unrefined's "segment" is 1 step
+# long here, so segment == step).
+DT = 0.5
+SINGLE_STEP_NUM_STEPS = 10
+UNREFINED_STEPS_PER_SEGMENT, UNREFINED_NUM_SEGMENTS = 1, 10
+REFINED_NUM_STEPS = 10
 
 NUM_RESTARTS = 100
 # Verified empirically (see git history / PR discussion) that GD convergence
@@ -213,8 +222,41 @@ def run_batched_sweep(loss_kind: str, u_shape_per_restart: Tuple[int, ...],
 
     def full_sweep(seed_val):
         key = jax.random.PRNGKey(seed_val)
-        u0 = (jax.random.normal(key, (num_configs, num_restarts) + u_shape_per_restart) * 0.3
-              + jnp.array([0.5, 0.3]))
+
+        if len(u_shape_per_restart) == 2:
+            # Multistep methods (unrefined/refined): separation_loss_multistep
+            # and refined_overlap_loss both take jnp.min over per-segment/
+            # per-step overlaps, so jax.grad backprops through only the ONE
+            # current worst segment -- every other segment's control gets
+            # exactly zero gradient each step (verified empirically). Plain
+            # per-segment-independent restarts can then converge to a worse
+            # optimum than single-step's, even though single-step's solution
+            # (one constant control, tiled across every segment) is always
+            # in this method's feasible set and provably achieves loss <=
+            # single-step's loss there (confirmed: tiling single-step's
+            # winning control into a 10-segment sequence and evaluating it
+            # under separation_loss_multistep reproduced single-step's exact
+            # loss, on a config where independent-restart GD alone stalled
+            # ~4 orders of magnitude above threshold). Fix: seed HALF the
+            # restarts as a single constant control broadcast across every
+            # segment/step -- i.e. give GD an explicit foothold already
+            # inside single-step's solution class -- instead of relying on
+            # free per-segment search to rediscover it. Pure addition to the
+            # restart pool (best-of-N over restarts), so this can only help.
+            key_indep, key_const = jax.random.split(key)
+            num_steps_dim = u_shape_per_restart[0]
+            u0_indep = (jax.random.normal(key_indep, (num_configs, num_restarts) + u_shape_per_restart) * 0.3
+                        + jnp.array([0.5, 0.3]))
+            u0_const_base = (jax.random.normal(key_const, (num_configs, num_restarts, 2)) * 0.3
+                              + jnp.array([0.5, 0.3]))
+            u0_const = jnp.broadcast_to(
+                u0_const_base[:, :, None, :], (num_configs, num_restarts, num_steps_dim, 2)
+            )
+            is_const_restart = jnp.arange(num_restarts) < (num_restarts // 2)
+            u0 = jnp.where(is_const_restart[None, :, None, None], u0_const, u0_indep)
+        else:
+            u0 = (jax.random.normal(key, (num_configs, num_restarts) + u_shape_per_restart) * 0.3
+                  + jnp.array([0.5, 0.3]))
 
         def body(u_batch):
             g = batched_grad(u_batch, x0_center, x0_width, alpha_lo, alpha_hi, sensor_offset, sensor_scale)
@@ -371,7 +413,8 @@ def run_method(name: str, loss_kind: str, u_shape_per_restart, loss_kwargs, conf
     restart_success_rate = jnp.mean(losses_final < SUCCESS_THRESHOLD, axis=1)   # (num_configs,)
     config_success = best_loss < SUCCESS_THRESHOLD
 
-    print(f"compile {compile_t * 1e3:8.2f} ms   run {run_t * 1e3:7.3f} ms   mem {mem}")
+    print(f"compile {compile_t * 1e3:8.2f} ms total ({compile_t / num_configs * 1e3:7.3f} ms/config)   "
+          f"run {run_t * 1e3:7.3f} ms total ({run_t / num_configs * 1e3:7.3f} ms/config)   mem {mem}")
     print(f"Config success rate: {int(jnp.sum(config_success))}/{num_configs} "
           f"({100 * float(jnp.mean(config_success)):.1f}%)")
 
@@ -507,11 +550,12 @@ def main():
     print(f"\nWrote summary CSV -> {out_csv}")
 
     print(f"\n{'=' * 78}\nSUMMARY ({'isolated, single-process run' if args.method != 'all' else 'all methods, one process -- see --method for isolated numbers'})\n{'=' * 78}")
+    print(f"  (compile/run reported per-config, i.e. total / {num_configs} configs)")
     for method, s in summaries.items():
         print(f"  {method:22s}: success {100*s['success_rate']:5.1f}%   "
-              f"compile {s['compile_time_s']*1e3:8.2f} ms   "
-              f"run {s['run_time_s']*1e3:7.3f} ms   "
-              f"steady-state {s['steady_state_run_time_s']*1e3:7.3f} ms   "
+              f"compile {s['compile_time_s']/num_configs*1e3:7.3f} ms/config   "
+              f"run {s['run_time_s']/num_configs*1e3:7.3f} ms/config   "
+              f"steady-state {s['steady_state_run_time_s']/num_configs*1e3:7.3f} ms/config   "
               f"mem {s['mem']}")
 
 
