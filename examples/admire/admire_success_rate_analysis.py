@@ -122,7 +122,15 @@ SEED = 42
 SCENARIOS = create_scenarios()   # 11 scenarios: Nominal + 10 total-loss faults (UNCHANGED)
 N_SCENARIOS = len(SCENARIOS)
 
-OUT_CSV = _HERE / "admire_success_rate_summary.csv"
+def _out_csv_for_method(method: str) -> Path:
+    """Method-specific summary CSV path.
+
+    Needed so that running the three methods as separate concurrent
+    processes (e.g. one PACE job per method) doesn't have them race on
+    writing the same file -- each method's own run only ever touches its
+    own CSV. `--method all` keeps the original shared filename."""
+    suffix = "" if method == "all" else f"_{method}"
+    return _HERE / f"admire_success_rate_summary{suffix}.csv"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -351,19 +359,37 @@ def main():
 
     methods_to_run = list(_METHOD_LOSS_BUILDERS) if args.method == "all" else [args.method]
 
-    all_rows = []
+    # Written incrementally, one (method, horizon)'s rows appended right
+    # after run_method_for_horizon returns them -- NOT collected in memory
+    # and written once at the very end. A compile that runs for tens of
+    # minutes per horizon (see module docstring) is a real OOM/walltime/
+    # maintenance-reclaim target; the old all-at-the-end write meant a kill
+    # during the LAST horizon lost the summary for every horizon that had
+    # already finished, even though their raw data was already safely on
+    # disk in per-horizon .npz files (see run_method_for_horizon). Start
+    # from a clean file each invocation (truncate any stale CSV from a
+    # previous run) so this can't silently append onto old data.
+    out_csv = _out_csv_for_method(args.method)
+    out_csv.unlink(missing_ok=True)
+    csv_fieldnames = None
     summaries = {}
     for horizon_s in horizons_to_run:
         for loss_kind in methods_to_run:
             rows, summary = run_method_for_horizon(loss_kind, horizon_s, config_arrays, combos)
-            all_rows += rows
             summaries[(loss_kind, horizon_s)] = summary
 
-    with open(OUT_CSV, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(all_rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(all_rows)
-    print(f"\nWrote summary CSV -> {OUT_CSV}")
+            is_new_file = csv_fieldnames is None
+            if is_new_file:
+                csv_fieldnames = list(rows[0].keys())
+            with open(out_csv, "a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
+                if is_new_file:
+                    writer.writeheader()
+                writer.writerows(rows)
+                f.flush()
+            print(f"Appended {len(rows)} rows -> {out_csv}")
+
+    print(f"\nWrote summary CSV -> {out_csv}")
 
     print(f"\n{'=' * 78}\nSUMMARY\n{'=' * 78}")
     for (method, horizon_s), s in summaries.items():
