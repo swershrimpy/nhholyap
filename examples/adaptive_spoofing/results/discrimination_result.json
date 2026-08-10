@@ -1,0 +1,41 @@
+{
+  "ground_truth_controller": "qps_snap_chain",
+  "survivors": [
+    "qps_snap_chain"
+  ],
+  "falsified": {
+    "qps_snap_chain": false,
+    "pd_pos_vel": true,
+    "pid_pos_vel_i": true,
+    "indi_jerk": true
+  },
+  "fail_step": {
+    "qps_snap_chain": -1,
+    "pd_pos_vel": 0,
+    "pid_pos_vel_i": 0,
+    "indi_jerk": 0
+  },
+  "x0_center_observable": [
+    -0.00033634869032539427,
+    -0.00022424706548918039,
+    0.9999117851257324,
+    -0.002973182126879692,
+    -0.0019818462897092104,
+    0.0020267420914024115,
+    0.03101964481174946,
+    0.020679045468568802,
+    -0.01263840589672327,
+    -0.17559868097305298,
+    -0.11706963181495667,
+    0.05030929297208786
+  ],
+  "x0_width_observable": 0.01,
+  "x0_width_hidden": 0.001,
+  "w_bar": 0.001,
+  "hover_pos": [
+    0.0,
+    0.0,
+    1.0
+  ],
+  "correct": true
+}
