@@ -106,6 +106,49 @@ def _scan_loop(step_fn, init, n: int):
     return carry
 
 
+def gd_early_stop(loss_fn, u0: jnp.ndarray, learning_rate: float,
+                  max_iters: int) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Projected gradient descent on a SINGLE control (no restart/config
+    batch dim), stopping as soon as loss_fn(u) hits exactly 0 instead of
+    always spending `max_iters` steps (`_scan_loop`'s behaviour) --
+    `max_iters` becomes an upper bound, not a fixed cost.
+
+    Jittable: built entirely from jax.lax.while_loop / jax.grad, no Python
+    control flow depends on a traced value.
+
+    Vmappable: call `jax.vmap(gd_early_stop, in_axes=(None, 0, None, None))`
+    (loss_fn closes over any per-instance config, u0 varies per instance)
+    exactly like this module vmaps _config_loss elsewhere. JAX's batching
+    rule for lax.while_loop keeps the loop running until EVERY vmapped
+    instance's condition is False, applying a per-lane jnp.where over the
+    WHOLE carry each step -- so an already-converged instance's (u, loss,
+    iters) is frozen exactly (no further gradient/update applied to it,
+    and `iters` reports its true convergence step), but the loop's total
+    TRIP COUNT is bounded by the slowest instance in the batch. Concretely:
+    if even one instance in a vmapped batch never reaches loss==0 (e.g. an
+    infeasible config, per the width-sweep investigation), the whole batch
+    still runs `max_iters` steps -- this saves wasted per-step work for
+    instances that DO converge early, not necessarily wall-clock time for
+    a batch that includes a non-convergent instance.
+
+    Returns (u_final, loss_final, num_iters_used).
+    """
+    grad_fn = jax.grad(loss_fn)
+
+    def cond_fn(carry):
+        _, loss, i = carry
+        return jnp.logical_and(loss > 0.0, i < max_iters)
+
+    def body_fn(carry):
+        u, _, i = carry
+        u_next = _project_u(u - learning_rate * grad_fn(u))
+        return u_next, loss_fn(u_next), i + 1
+
+    init = (u0, loss_fn(u0), jnp.array(0, dtype=jnp.int32))
+    u_final, loss_final, num_iters = jax.lax.while_loop(cond_fn, body_fn, init)
+    return u_final, loss_final, num_iters
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 0.  Timing / Memory Helper
 # ══════════════════════════════════════════════════════════════════════════════
