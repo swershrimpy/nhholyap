@@ -91,6 +91,26 @@ def traj_coeffs_from_waypoint(end_pos: jnp.ndarray, start_state4x3: jnp.ndarray,
     """
     M = _build_boundary_matrix(T)
 
+    # Defensive float32 cast: without it, this silently follows whatever
+    # jax_enable_x64 happens to be at call time (a GLOBAL, mutable JAX
+    # setting) rather than this module's own explicit float32 convention.
+    # Concretely: importing crazyflie_firmware_controllers.py pulls in
+    # rq3_crazyflie_surrogates.py, which calls
+    # jax.config.update("jax_enable_x64", True) unconditionally on import
+    # (not something this project can or should change -- that file lives
+    # outside this repo). If BOTH modules get imported into the same
+    # process (e.g. pytest collecting the whole tests/ directory), plain
+    # jnp.zeros(...)/jnp.array(...) calls made by CALLERS of this function
+    # after that point silently become float64, while build_mission_reference
+    # below still builds its own next_state as float32 -- a carry dtype
+    # mismatch inside jax.lax.scan. Verified: all 59 tests in this module
+    # pass in isolation; the failure only appeared when collected alongside
+    # test_crazyflie_firmware_controllers.py in the same pytest run. Casting
+    # here (and in build_mission_reference below) makes this module's
+    # dtype behavior independent of that ambient global state.
+    start_state4x3 = jnp.asarray(start_state4x3, dtype=jnp.float32)
+    end_pos = jnp.asarray(end_pos, dtype=jnp.float32)
+
     # RHS: [x0, v0, a0, j0, xf, 0, 0, 0] per axis
     rhs = jnp.zeros((8, 3), dtype=jnp.float32)
     rhs = rhs.at[0, :].set(start_state4x3[0])  # pos
@@ -173,6 +193,16 @@ def build_mission_reference(waypoints: jnp.ndarray, x0_state4x3: jnp.ndarray,
                where T_total = K * steps_per_hop and each row is
                [pos, vel, acc, jerk, snap].
     """
+    # Defensive float32 cast -- see the same note in traj_coeffs_from_waypoint.
+    # x0_state4x3 in particular is the INITIAL CARRY jax.lax.scan is given
+    # below; compute_one_hop's returned next_state is hardcoded float32, so
+    # if the caller's x0_state4x3 came from a plain jnp.zeros(...)/jnp.array(...)
+    # made while jax_enable_x64 happened to be globally True, scan raises
+    # "carry input and carry output must have equal types" -- fixed here so
+    # this function's behavior doesn't depend on ambient global JAX config.
+    waypoints = jnp.asarray(waypoints, dtype=jnp.float32)
+    x0_state4x3 = jnp.asarray(x0_state4x3, dtype=jnp.float32)
+
     K = waypoints.shape[0]
     # steps_per_hop must be a concrete Python int (not traced) since it's
     # used as the length argument to jnp.arange inside jax.lax.scan.
@@ -181,7 +211,7 @@ def build_mission_reference(waypoints: jnp.ndarray, x0_state4x3: jnp.ndarray,
     steps_per_hop = int(round(float(T_hop) / float(dt)))
 
     # Pre-compute the sample times (concrete shape, independent of traced values)
-    times = (jnp.arange(steps_per_hop) + 1) * dt  # (steps_per_hop,)
+    times = (jnp.arange(steps_per_hop, dtype=jnp.float32) + 1) * dt  # (steps_per_hop,)
 
     def compute_one_hop(carry, waypoint_idx):
         """Compute one hop's coefficients and sample it."""

@@ -1,0 +1,102 @@
+{
+  "u_seq": [
+    [
+      -0.2489663224342078,
+      0.3,
+      -0.11827879460326068
+    ],
+    [
+      0.013647702214799913,
+      -0.02545502568461858,
+      0.1848612394810573
+    ],
+    [
+      -0.013435558641398167,
+      -0.18551895879124317,
+      -0.06913637380088146
+    ]
+  ],
+  "final_positions": {
+    "cf_pid": [
+      0.0006167780425680811,
+      -0.0006510325399946158,
+      0.003051439618125332
+    ],
+    "cf_mellinger": [
+      0.0011172107219551254,
+      -0.001176061204037776,
+      0.005547383762454301
+    ],
+    "cf_indi": [
+      0.0002889923122316714,
+      -0.00030695302332411044,
+      0.000603290066396446
+    ],
+    "cf_brescianini": [
+      0.0008397720085970102,
+      -0.000884281754084382,
+      0.0013398854045282168
+    ]
+  },
+  "pairwise_final_separation_m": {
+    "cf_pid vs cf_mellinger": 0.002599197017595148,
+    "cf_pid vs cf_indi": 0.0024938465122045362,
+    "cf_pid vs cf_brescianini": 0.0017417087388081982,
+    "cf_mellinger vs cf_indi": 0.005087765446577436,
+    "cf_mellinger vs cf_brescianini": 0.004226718575802701,
+    "cf_indi vs cf_brescianini": 0.0010859279117174485
+  },
+  "min_separation_m": 0.0010859279117174485,
+  "discrimination_verdicts": {
+    "cf_pid": {
+      "survivors": [
+        "cf_pid"
+      ],
+      "fail_step": {
+        "cf_pid": -1,
+        "cf_mellinger": 0,
+        "cf_indi": 0,
+        "cf_brescianini": 1
+      },
+      "correct": true
+    },
+    "cf_mellinger": {
+      "survivors": [
+        "cf_mellinger"
+      ],
+      "fail_step": {
+        "cf_pid": 0,
+        "cf_mellinger": -1,
+        "cf_indi": 0,
+        "cf_brescianini": 1
+      },
+      "correct": true
+    },
+    "cf_indi": {
+      "survivors": [
+        "cf_indi"
+      ],
+      "fail_step": {
+        "cf_pid": 0,
+        "cf_mellinger": 0,
+        "cf_indi": -1,
+        "cf_brescianini": 0
+      },
+      "correct": true
+    },
+    "cf_brescianini": {
+      "survivors": [
+        "cf_brescianini"
+      ],
+      "fail_step": {
+        "cf_pid": 0,
+        "cf_mellinger": 1,
+        "cf_indi": 0,
+        "cf_brescianini": -1
+      },
+      "correct": true
+    }
+  },
+  "all_correct": true,
+  "note": "Point-simulation verification (real controller equations, no CrazySim/Gazebo/firmware-binary layer -- see module docstring)."
+}

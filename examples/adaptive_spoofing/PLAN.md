@@ -540,3 +540,191 @@ Artifacts: `results/synthesized_waypoints.npz`,
 `results/qps_waypoint_observed_trajectory.npz`,
 `results/qps_waypoint_flight.mp4`, `results/qps_waypoint_reference_log.json`,
 `results/waypoint_discrimination_result.json`.
+
+## 11. Correction: the 4-controller bank was fictional -- rebuilt on the REAL firmware controllers
+
+The bank used through Secs 1-10 (`qps_snap_chain`/`pd_pos_vel`/`pid_pos_vel_i`/
+`indi_jerk` in `crazyflie_chain_controllers.py`) was flagged by the user as
+wrong: the actual four controllers of interest are the Crazyflie firmware's
+own **PID, Mellinger, INDI, and Brescianini** controllers, precisely defined
+in `~/adaptive_spoofing/experiments/RQ3_transferability_pipeline/rq3_crazyflie_surrogates.py`
+(a substantial rewrite of the RQ3 experiment directory since Secs 1-10 were
+written — the old `experiments/RQ3/rq3_model_bank.py` this project was
+originally built against no longer represents the project's current state).
+`crazyflie_firmware_controllers.py` + `run_firmware_discrimination.py`
+replace the old bank with these four real controllers. Kept
+`crazyflie_chain_controllers.py` in place rather than deleting it (still a
+valid demonstration of the discrimination *machinery* on a toy bank; just no
+longer the "real" one this project targets).
+
+**Why four separate `irx.System`s, not one masked-theta family.** The old
+bank was unifiable because it really was one 5-term linear law with three
+candidates as subsets. These four real controllers are not: theta counts
+differ (15/12/11/10), meanings differ even where indices align, and memory
+kinds differ (velocity-error integral / position-error integral /
+incremental-with-filtered-acceleration / none). Each candidate gets its own
+system + embedding; propagation loops over the fixed 4 (or 6 pairs) in plain
+Python rather than vmapping a shared trace — fine since every candidate is
+linear/affine (no compile-cost concern the way the nonlinear rigid-body
+systems elsewhere in this repo have).
+
+**State, control, params.** 21-dim: `[position(3), velocity(3),
+attitude(3), rates(3), integ(3), prev_cmd(3), accel_filt(3)]` — the first
+12 are the source's own hover-linearized plant convention (`HoverPlant`),
+observable; the last 9 are controller-internal memory (unified/padded
+across all 4 candidates, each reading only its own subset), hidden. Control
+= the attacker's position-spoof bias (same convention throughout this
+project). Params = each candidate's own real `theta_true` gain vector,
+**imported directly from the reference module** (not re-derived by hand) to
+eliminate transcription-error risk — cross-checked against the source's own
+`.step()`/`.affine_step_terms()` at random states,
+`tests/test_crazyflie_firmware_controllers.py`, matching to ~1e-11
+(37 tests, all passing).
+
+**`evolution='discrete'`, not `continuous`+`euler_step`.** `HoverPlant`'s
+`x_next = A@x + B@u` is already a one-tick discrete affine map (semi-implicit
+Euler baked into A, B); wrapping it in `continuous` would add a redundant,
+wrong extra discretization. (Immrax's discrete-evolution embedding needs an
+explicit `refine=lambda z: z` passed to `emb.f(...)` — its default `None`
+crashes the discrete branch, which calls it unconditionally; `continuous`
+evolution guards against `None` itself, which is why no earlier module in
+this project needed to know this.)
+
+**Real API roadblocks found and fixed (not glossed over):**
+
+1. **`jnp.abs` and direct comparisons aren't in immrax's `natif` inclusion
+   registry** (checked: only `min`/`max`/`eq`/etc.) — needed for cf_pid's
+   velocity-setpoint clamp and its saturation "survival fraction." Fixed
+   with `abs(x) = sqrt(x**2)`, NOT `max(x,-x)` — the latter looks equivalent
+   pointwise but is UNSOUND under natif's *natural* (not mean-value)
+   extension: for an interval straddling zero, natif computes `max` of `x`
+   and `-x` independently and just reproduces the same straddling interval
+   instead of `[0, max(|lo|,|hi|)]` (the classic interval dependency
+   problem) — verified directly (a straddling interval blew up to `-inf`
+   under `max(x,-x)`, stayed sound at `[0, ...]` under `sqrt(x**2)`). The
+   source's hard-boolean `_clip_survival` (`clipped/raw` guarded by
+   `|raw|>1e-12`) was replaced with the equivalent smooth
+   `min(1, L/(|raw|+eps))`, needing no comparison and limiting to exactly 1
+   as raw->0 (matches the source's discrete formula to 1e-6 at concrete
+   points).
+2. **`sqrt(x**2)` has a NaN *gradient* at exactly x=0** (`d/dx sqrt(x^2) =
+   x/sqrt(x^2) = 0/0` there) even though the *value* is fine — a classic
+   autodiff gotcha, found only because a random-restart optimizer's initial
+   bias landed a tracking error at exactly 0 on some axis and every
+   gradient from that restart onward was NaN. Fixed with a `grad_eps=1e-18`
+   floor under the sqrt (`sqrt(x**2 + grad_eps)`), verified still sound
+   under interval inputs (bounds shift by <1e-9, negligible) while making
+   the gradient well-defined everywhere.
+3. **This system's natural-embedding reachable sets have a strong
+   "wrapping effect"**: propagating from a uniform width-0.3 box (chosen as
+   a first "realistic-looking" uncertainty) blew up to interval widths of
+   order 1e15-1e19 within 8 steps — verified this wasn't a real
+   instability (the point-simulated closed loop is stable, confirmed
+   separately) but pure over-approximation: max interval width roughly
+   DOUBLES every step (measured across all 4 candidates: ~2.0-2.1x/step
+   steady-state ratio, after a large first-step jump from the rate/attitude
+   coupling), independent of starting scale. Root cause: the semi-implicit,
+   strongly-coupled 12-state plant (rate<-torque<-attitude<-rate feedback
+   each step) has much less diagonal structure than this project's other
+   (chain-of-integrator or fault-diagnosis) systems, so axis-aligned
+   interval boxes overestimate the true (rotated/correlated) reachable set
+   far more aggressively per step. Fix: use realistic, PER-AXIS-scaled
+   uncertainty (position/velocity ~5cm(/s), attitude ~1deg, rates ~0.05
+   rad/s — NOT a single blanket number, since 0.3 rad of attitude
+   uncertainty is both physically implausible for a converged estimate and
+   far outside where the wrapping effect stays manageable) and a SHORT
+   horizon (3 steps here) — not a limitation in practice, since these real
+   controllers discriminate fast anyway (see finding 5 below).
+4. **`separation_loss`'s min-over-time included k=0**, the shared prior
+   `x0_ivl` before any step or bias is applied — identical across every
+   scenario by construction, so including it in the min made the entire
+   objective bias-INDEPENDENT. Caught because the optimizer's "best loss"
+   came back bit-for-bit equal to the zero-bias loss across many restarts,
+   which is the signature of a degenerate objective, not a converged one.
+   Fixed by starting the min at k=1 (first post-step state) — matches
+   `crazyflie_chain_controllers.py`'s multistep/refinement convention,
+   which never included the pre-step prior in the first place (this was a
+   new bug introduced while implementing this module, not an old one
+   inherited).
+5. **`jax.vmap` over the natif-embedded gradient silently returns NaN for
+   SOME restarts that are perfectly finite when run individually** —
+   verified directly: seed-0 restarts 9 and 28 of an identical 32-restart
+   batch both broke ONLY under `jax.vmap(opt.grad_fn)`, not when the exact
+   same input was passed to `opt.grad_fn` on its own. This looks like a
+   genuine vmap/natif interaction bug in immrax, not something diagnosable
+   or fixable from application code in the time available — worked around
+   (not chased further) by dropping vmap-over-restarts entirely:
+   `optimize_parallel_gpu`/`optimize_refined_gpu` now loop over restarts in
+   plain Python, each restart's `jax.lax.scan`-over-iterations wrapped in
+   its own `@jax.jit` so compilation is still cached and reused across
+   restarts (~11s for 32 restarts x 200 iters, not meaningfully slower than
+   the vmapped version WOULD have been if it worked).
+
+**Result** (`run_firmware_discrimination.py`,
+`results/firmware_discrimination_result.json`,
+`results/firmware_pairwise_overlap.png`): two regimes reported honestly
+rather than picking whichever looks better —
+- **Tight uncertainty** (width=1e-3, realistic for a converged state
+  estimate): all 6 pairs separate INSTANTLY at ZERO spoof bias — these four
+  real controllers' gains differ enough in scale/structure that no attack
+  is needed to tell them apart from a well-estimated starting point. Not a
+  bug: verified all 4 correctly survive as their own ground truth.
+- **Wide (realistic per-axis) uncertainty**: genuine overlap exists at zero
+  bias (loss=3.35e-10); optimized spoof bias reduces it to 6.58e-11 (~5x),
+  hitting the 0.3m box constraint (active). All 4 candidates still
+  correctly survive as their own ground truth under the optimized bias.
+
+## 12. Waypoint dtype bug (other session's code) -- fixed
+
+`crazyflie_waypoint_trajectory.py`'s `build_mission_reference` raised
+`TypeError: scan body function carry input and carry output must have
+equal types (float64[4,3] vs float32[4,3])` when the full test suite ran.
+Root cause, verified before touching anything: NOT a bug in that module in
+isolation (`test_crazyflie_waypoint_*.py` — 59 tests — all pass standalone).
+It's a cross-module side effect: `crazyflie_firmware_controllers.py`
+imports `rq3_crazyflie_surrogates.py` (this project's real-firmware source
+of truth, living outside this repo), which calls
+`jax.config.update("jax_enable_x64", True)` unconditionally on import —
+mutating GLOBAL JAX state. When pytest collects both test files into one
+process, plain `jnp.zeros(...)`/`jnp.array(...)` calls in the waypoint
+module's callers silently become float64 after that point, while
+`build_mission_reference`'s own `next_state` stays hardcoded float32 — a
+carry dtype mismatch. Since the reference file can't (and shouldn't) be
+modified, fixed by making `crazyflie_waypoint_trajectory.py` defensively
+cast its own inputs (`x0_state4x3`, `waypoints`, `end_pos`, `start_state4x3`,
+the `times` array) to `float32` at each public function's entry, so its
+behavior no longer depends on ambient global config set by unrelated
+modules. Verified: `test_crazyflie_firmware_controllers.py` +
+`test_crazyflie_waypoint_trajectory.py` + `test_crazyflie_waypoint_controllers.py`
+together now pass (96/96), the exact combination that used to fail.
+
+## 13. Simulation verification of the firmware-controller discrimination
+
+`verify_firmware_simulation.py`: for each of the 4 real controllers, a
+plain point (non-interval) rollout of that controller's exact closed-loop
+equations (`simulate_true_trajectory`, same real firmware-derived gains
+already used for reachability) under the SAME synthesized spoof-bias
+sequence from Sec 11's wide-uncertainty regime.
+
+**Considered and declined: full CrazySim SITL.** `rq3_crazyflie_surrogates.py`
+cites CrazySim (the actual compiled firmware binary in Gazebo/MuJoCo,
+`~/adaptive_spoofing/libs/CrazySim` + a dedicated Docker devcontainer,
+`docs/rq3_crazysim_container.md`) as its ground truth. Checked feasibility
+before attempting: disk was at 94% (26GB free), the CrazySim git submodule
+was uninitialized, and the container needs ROS2 Humble + Gazebo Garden +
+a ~15min firmware SITL build — asked the user given the real risk of
+exhausting disk space mid-build; they chose the lighter point-simulation
+verification instead. `CrazySim` remains the natural next step for anyone
+who wants to validate against the actual firmware binary rather than a
+transcription of its control law.
+
+**Result**: all 4 simulated trajectories are correctly discriminated
+(`discriminate_controller` on the simulated trajectory always survives
+only the true controller). Final-position separation after 3 steps (60ms)
+is small in absolute terms (1-5mm — expected, given the short horizon) but
+clearly nonzero and correctly resolved; ATTITUDE (roll/pitch) is the more
+strongly-separated signal at this horizon — all 4 controllers' roll/pitch
+are already visibly distinct within the FIRST step (see
+`results/firmware_simulated_trajectories.png`), well before position has
+had time to diverge much. `results/firmware_simulation_verification.json`
+has the full numbers.
