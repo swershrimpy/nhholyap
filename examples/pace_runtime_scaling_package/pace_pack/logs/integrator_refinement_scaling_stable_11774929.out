@@ -1,0 +1,1621 @@
+---------------------------------------
+Begin Slurm Prolog: Aug-09-2026 23:05:48
+Job ID:    11774929
+User ID:   xni32
+Account:   gts-scoogan3-fy20phase3
+Job name:  integrator-refinement-scaling-stable
+Partition: gpu-v100
+QOS:       inferno
+---------------------------------------
+=== Slurm job 11774929 on atl1-1-03-006-33-0.pace.gatech.edu at Sun Aug  9 11:05:48 PM EDT 2026 ===
+REPO_ROOT: /storage/scratch1/9/xni32/nhholyap
+GPUs visible: 0
+Tesla V100-PCIE-32GB, 575.57.08, 32768 MiB
+Python: Python 3.11.15 @ /storage/scratch1/9/xni32/nhholyap/envs/immrax/bin/python
+JAX devices: [CudaDevice(id=0)]
+
+================================================================
+  integrator_chain refinement scaling sweep, nan-safe (N=2..100)
+  Started: Sun Aug  9 11:11:59 PM EDT 2026
+================================================================
+Devices: [CudaDevice(id=0)]
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=2
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.157749
+
+refined multistart: compile 78832.84 ms   run   4.141 ms   (30 restarts x 20 iters)
+  refined best loss:   0.150700   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.157749
+  refined loss:   0.157749  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 7168.0, 'peak_bytes_in_use': 147712.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=3
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.037971
+
+refined multistart: compile 74753.22 ms   run   2.789 ms   (30 restarts x 20 iters)
+  refined best loss:   0.035758   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.037971
+  refined loss:   0.037971  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 10240.0, 'peak_bytes_in_use': 199168.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=4
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.010577
+
+refined multistart: compile 62509.73 ms   run   3.975 ms   (30 restarts x 20 iters)
+  refined best loss:   0.009934   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.010577
+  refined loss:   0.010577  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 13312.0, 'peak_bytes_in_use': 279296.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=5
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.003171
+
+refined multistart: compile 94276.94 ms   run   3.596 ms   (30 restarts x 20 iters)
+  refined best loss:   0.002977   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.003171
+  refined loss:   0.003171  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 16384.0, 'peak_bytes_in_use': 394496.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=6
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000981
+
+refined multistart: compile 94595.32 ms   run   3.833 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000920   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000981
+  refined loss:   0.000981  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 19456.0, 'peak_bytes_in_use': 560640.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=7
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000307
+
+refined multistart: compile 78833.75 ms   run   3.278 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000288   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000307
+  refined loss:   0.000307  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 22528.0, 'peak_bytes_in_use': 759808.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=8
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000096
+
+refined multistart: compile 70824.99 ms   run   3.280 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000090   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000096
+  refined loss:   0.000096  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 25600.0, 'peak_bytes_in_use': 987904.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=9
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000030
+
+refined multistart: compile 98799.49 ms   run   3.964 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000028   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000030
+  refined loss:   0.000030  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 28672.0, 'peak_bytes_in_use': 1226496.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=10
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000010
+
+refined multistart: compile 88899.61 ms   run   3.426 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000009   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000010
+  refined loss:   0.000010  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 31744.0, 'peak_bytes_in_use': 1512448.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=11
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000003
+
+refined multistart: compile 110704.90 ms   run   3.370 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000003   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000003
+  refined loss:   0.000003  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 34816.0, 'peak_bytes_in_use': 1843968.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=12
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000001
+
+refined multistart: compile 123410.88 ms   run   3.107 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000001   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000001
+  refined loss:   0.000001  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 37888.0, 'peak_bytes_in_use': 2174464.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=13
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 104892.78 ms   run   3.136 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 40960.0, 'peak_bytes_in_use': 2521600.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=14
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 95082.03 ms   run   3.021 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 44032.0, 'peak_bytes_in_use': 2958080.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=15
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 131024.73 ms   run   3.149 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 47104.0, 'peak_bytes_in_use': 3357184.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=16
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 72871.83 ms   run   3.394 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 50176.0, 'peak_bytes_in_use': 3819776.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=17
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 89660.11 ms   run   3.359 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 53248.0, 'peak_bytes_in_use': 4269056.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=18
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 70860.64 ms   run   3.535 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 56320.0, 'peak_bytes_in_use': 4825088.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=19
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 91819.81 ms   run   3.079 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 59392.0, 'peak_bytes_in_use': 5380352.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=20
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 86013.55 ms   run   3.599 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 62464.0, 'peak_bytes_in_use': 5949952.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=21
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 82917.96 ms   run   3.361 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 65536.0, 'peak_bytes_in_use': 6545664.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=22
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 76846.91 ms   run   3.777 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 68608.0, 'peak_bytes_in_use': 7170304.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=23
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 76137.42 ms   run   4.109 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 71680.0, 'peak_bytes_in_use': 7830016.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=24
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 80042.17 ms   run   3.626 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 74752.0, 'peak_bytes_in_use': 8527360.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=25
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 107822.20 ms   run   3.527 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 77824.0, 'peak_bytes_in_use': 9255936.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=26
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 106975.53 ms   run   7.140 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 80896.0, 'peak_bytes_in_use': 10001920.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=27
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 84499.81 ms   run   6.622 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 83968.0, 'peak_bytes_in_use': 10795264.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=28
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 102648.02 ms   run   7.334 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 87040.0, 'peak_bytes_in_use': 11622912.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=29
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 159408.41 ms   run   7.302 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 90112.0, 'peak_bytes_in_use': 12492544.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=30
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 94718.53 ms   run   7.450 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 93184.0, 'peak_bytes_in_use': 13368320.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=31
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 125253.55 ms   run   4.187 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 96256.0, 'peak_bytes_in_use': 14254848.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=32
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 103954.94 ms   run  17.064 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 99328.0, 'peak_bytes_in_use': 15203840.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=33
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 146369.96 ms   run  18.511 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 102400.0, 'peak_bytes_in_use': 16114688.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=34
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 93844.00 ms   run  16.893 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 105472.0, 'peak_bytes_in_use': 17139712.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=35
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 147656.00 ms   run  15.734 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 108544.0, 'peak_bytes_in_use': 18167040.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=36
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 135028.31 ms   run  17.011 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 111616.0, 'peak_bytes_in_use': 19220480.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=37
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 113090.78 ms   run  17.711 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 114688.0, 'peak_bytes_in_use': 20324608.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=38
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 108937.27 ms   run  18.043 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 117760.0, 'peak_bytes_in_use': 21402880.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=39
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 146618.26 ms   run  17.908 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 120832.0, 'peak_bytes_in_use': 22581504.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=40
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 119327.68 ms   run  17.213 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 123904.0, 'peak_bytes_in_use': 23724288.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=41
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 117582.33 ms   run  17.647 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 126976.0, 'peak_bytes_in_use': 24942592.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=42
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 143947.38 ms   run  17.881 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 130048.0, 'peak_bytes_in_use': 26153984.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=43
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 120608.40 ms   run  18.580 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 133120.0, 'peak_bytes_in_use': 27419392.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=44
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 128972.07 ms   run  18.132 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 136192.0, 'peak_bytes_in_use': 28717056.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=45
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 126141.64 ms   run  18.537 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 139264.0, 'peak_bytes_in_use': 30036480.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=46
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 137586.65 ms   run  18.443 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 142336.0, 'peak_bytes_in_use': 31397888.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=47
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 123364.27 ms   run  18.114 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 145408.0, 'peak_bytes_in_use': 32758784.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=48
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 168965.01 ms   run  18.368 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 148480.0, 'peak_bytes_in_use': 34194944.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=49
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 158939.30 ms   run 416.534 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 151552.0, 'peak_bytes_in_use': 35575552.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=50
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 188322.45 ms   run 123.217 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 154624.0, 'peak_bytes_in_use': 37098240.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=51
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 122549.04 ms   run  18.948 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 157696.0, 'peak_bytes_in_use': 38564096.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=52
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 155443.27 ms   run  20.557 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 160768.0, 'peak_bytes_in_use': 40144896.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=53
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 147392.45 ms   run  19.952 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 163840.0, 'peak_bytes_in_use': 41704448.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=54
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 175809.85 ms   run  48.691 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 166912.0, 'peak_bytes_in_use': 43273472.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=55
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 150159.79 ms   run  19.610 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 169984.0, 'peak_bytes_in_use': 44915712.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=56
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 147218.93 ms   run  19.419 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 173056.0, 'peak_bytes_in_use': 46531328.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=57
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 168933.27 ms   run  66.179 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 176128.0, 'peak_bytes_in_use': 48203776.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=58
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 224241.60 ms   run  75.747 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 179200.0, 'peak_bytes_in_use': 49920512.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=59
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 162220.41 ms   run  20.030 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 182272.0, 'peak_bytes_in_use': 51657216.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=60
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 162963.51 ms   run  19.947 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 185344.0, 'peak_bytes_in_use': 53443328.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=61
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 154637.39 ms   run  19.976 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 188416.0, 'peak_bytes_in_use': 55236608.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=62
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 181829.36 ms   run  19.641 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 191488.0, 'peak_bytes_in_use': 57087232.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=63
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 197053.90 ms   run  19.453 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 194560.0, 'peak_bytes_in_use': 58911488.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=64
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 175468.97 ms   run 197.619 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 197632.0, 'peak_bytes_in_use': 60819456.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=65
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 166472.81 ms   run  25.940 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 204800.0, 'peak_bytes_in_use': 62676480.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=66
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 159858.18 ms   run  66.932 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 209920.0, 'peak_bytes_in_use': 64643840.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=67
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 154536.81 ms   run  21.418 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 215040.0, 'peak_bytes_in_use': 66624256.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=68
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 167501.36 ms   run 151.330 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 220160.0, 'peak_bytes_in_use': 68624128.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=69
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 170078.38 ms   run  22.513 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 225280.0, 'peak_bytes_in_use': 70707968.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=70
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 197323.15 ms   run 177.814 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 230400.0, 'peak_bytes_in_use': 72772608.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=71
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 176524.44 ms   run  22.265 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 235520.0, 'peak_bytes_in_use': 74864896.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=72
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 200654.37 ms   run 193.469 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 240640.0, 'peak_bytes_in_use': 76965888.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=73
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 190146.58 ms   run  22.834 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 245760.0, 'peak_bytes_in_use': 79181568.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=74
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 196584.26 ms   run  23.074 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 250880.0, 'peak_bytes_in_use': 81328128.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=75
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 174265.87 ms   run  22.914 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 256000.0, 'peak_bytes_in_use': 83547648.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=76
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 169494.47 ms   run  22.099 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 261120.0, 'peak_bytes_in_use': 85838336.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=77
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 178206.65 ms   run 149.120 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 266240.0, 'peak_bytes_in_use': 88101888.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=78
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 155902.52 ms   run  23.315 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 271360.0, 'peak_bytes_in_use': 90405376.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=79
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 151446.17 ms   run  24.151 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 276480.0, 'peak_bytes_in_use': 92762368.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=80
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 145608.40 ms   run  22.869 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 281600.0, 'peak_bytes_in_use': 95058432.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=81
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 170891.66 ms   run  23.863 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 286720.0, 'peak_bytes_in_use': 97434880.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=82
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 179365.18 ms   run  23.656 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 291840.0, 'peak_bytes_in_use': 99866368.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=83
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 248853.42 ms   run 162.039 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 296960.0, 'peak_bytes_in_use': 102319616.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=84
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 215548.96 ms   run 170.215 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 302080.0, 'peak_bytes_in_use': 104834816.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=85
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 163584.64 ms   run  24.878 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 307200.0, 'peak_bytes_in_use': 107372288.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=86
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 187975.67 ms   run  52.773 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 312320.0, 'peak_bytes_in_use': 109888512.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=87
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 200642.46 ms   run 111.626 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 317440.0, 'peak_bytes_in_use': 112459264.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=88
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 199515.89 ms   run 210.802 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 322560.0, 'peak_bytes_in_use': 115059456.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=89
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 164705.95 ms   run  86.400 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 327680.0, 'peak_bytes_in_use': 117714432.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=90
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 146359.67 ms   run  24.334 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 332800.0, 'peak_bytes_in_use': 120381440.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=91
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 145626.29 ms   run  24.041 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 337920.0, 'peak_bytes_in_use': 123079936.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=92
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 137875.25 ms   run  23.725 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 343040.0, 'peak_bytes_in_use': 125753088.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=93
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 136727.60 ms   run  25.407 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 348160.0, 'peak_bytes_in_use': 128551680.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=94
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 140879.23 ms   run  23.731 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 353280.0, 'peak_bytes_in_use': 131361024.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=95
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 142978.28 ms   run  24.092 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 358400.0, 'peak_bytes_in_use': 134182656.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=96
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 142423.09 ms   run  22.301 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 363520.0, 'peak_bytes_in_use': 137014272.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=97
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 191389.10 ms   run  31.208 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 368640.0, 'peak_bytes_in_use': 139789824.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=98
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 159347.69 ms   run  23.433 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 373760.0, 'peak_bytes_in_use': 142767872.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=99
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 166371.54 ms   run  24.112 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 378880.0, 'peak_bytes_in_use': 145626624.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+======================================================================
+INTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N=100
+======================================================================
+
+Optimizing UNREFINED (uninformed) separating input sequence...
+  unrefined best loss: 0.000000
+
+refined multistart: compile 156017.58 ms   run  23.994 ms   (30 restarts x 20 iters)
+  refined best loss:   0.000000   (0/30 restarts went nan)
+
+Same control sequence (unrefined-optimal u_seq):
+  unrefined loss: 0.000000
+  refined loss:   0.000000  (<= unrefined, as expected)
+
+Memory snapshot: {'bytes_in_use': 384000.0, 'peak_bytes_in_use': 148598784.0, 'bytes_limit': 25554419712.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 25554419712.0, 'peak_pool_bytes': 25554419712.0}
+
+Done.
+
+Refinement scaling sweep (stable) complete at Mon Aug 10 08:54:41 AM EDT 2026
+---------------------------------------
+Begin Slurm Epilog: Aug-10-2026 08:54:42
+Job ID:        11774929
+User ID:       xni32
+Account:       gts-scoogan3-fy20phase3
+Job name:      integrator-refinement-scaling-stable
+Resources:     cpu=8,gres/gpu:v100=1,mem=80G,node=1
+Rsrc Used:     cput=3-06:31:04,vmem=0,walltime=09:48:53,mem=24995472K,energy_used=0
+Partition:     gpu-v100
+QOS:           inferno
+Nodes:         atl1-1-03-006-33-0
+---------------------------------------
