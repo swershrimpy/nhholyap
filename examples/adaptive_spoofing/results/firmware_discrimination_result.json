@@ -40,31 +40,31 @@
       0.01
     ],
     "loss_at_zero_bias": 3.352345841890392e-10,
-    "loss_at_optimized_bias": 6.575618063598807e-11,
+    "loss_at_optimized_bias": 1.9928766928056341e-10,
     "u_star": [
       [
-        -0.2489663224342078,
-        0.3,
-        -0.11827879460326068
+        -0.12448316117835241,
+        0.15,
+        -0.05913939729835687
       ],
       [
-        0.013647702214799913,
-        -0.02545502568461858,
-        0.1848612394810573
+        0.006823851107399957,
+        -0.01272751284230929,
+        0.09243061974052864
       ],
       [
-        -0.013435558641398167,
-        -0.18551895879124317,
-        -0.06913637380088146
+        -0.006717779320699084,
+        -0.09275947939562158,
+        -0.03456818690044073
       ]
     ],
     "pairwise_overlaps_optimized": {
-      "cf_pid vs cf_mellinger": 1.570114543509081e-06,
-      "cf_pid vs cf_indi": 1.170557661546395e-07,
-      "cf_pid vs cf_brescianini": 1.8419560373064046e-06,
+      "cf_pid vs cf_mellinger": 1.567899975770073e-06,
+      "cf_pid vs cf_indi": 1.1684454489829283e-07,
+      "cf_pid vs cf_brescianini": 1.8389129878031826e-06,
       "cf_mellinger vs cf_indi": 0.0,
-      "cf_mellinger vs cf_brescianini": 8.279835842868643e-07,
-      "cf_indi vs cf_brescianini": 1.9170143896242377e-07
+      "cf_mellinger vs cf_brescianini": 8.307944929382253e-07,
+      "cf_indi vs cf_brescianini": 1.9172223279267243e-07
     },
     "w_bar_used": 0.001,
     "ground_truth_survives": {
@@ -76,7 +76,7 @@
     "fail_steps": {
       "cf_pid": {
         "cf_pid": -1,
-        "cf_mellinger": 0,
+        "cf_mellinger": 1,
         "cf_indi": 0,
         "cf_brescianini": 1
       },
@@ -87,13 +87,13 @@
         "cf_brescianini": 1
       },
       "cf_indi": {
-        "cf_pid": 0,
+        "cf_pid": 1,
         "cf_mellinger": 0,
         "cf_indi": -1,
-        "cf_brescianini": 0
+        "cf_brescianini": 1
       },
       "cf_brescianini": {
-        "cf_pid": 0,
+        "cf_pid": 1,
         "cf_mellinger": 1,
         "cf_indi": 0,
         "cf_brescianini": -1

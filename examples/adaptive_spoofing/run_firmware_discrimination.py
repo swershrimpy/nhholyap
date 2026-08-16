@@ -31,6 +31,27 @@ import matplotlib.pyplot as plt
 import jax.numpy as jnp
 import immrax as irx
 
+# Paper-figure style: a Times-metric serif so the figures match the
+# manuscript's body text. Liberation Serif is metrically compatible with
+# Times New Roman and is a genuine TrueType face, so it embeds cleanly under
+# fonttype 42; Nimbus Roman (the URW Times clone) is also metric-compatible
+# but is OpenType/CFF, which makes readers warn "mismatch between font type
+# and embedded font file" -- hence Liberation first.
+# fonttype 42 embeds real glyphs rather than rasterising, so the PDF stays
+# vector and the text stays selectable/searchable.
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Liberation Serif", "Times New Roman", "Nimbus Roman", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "axes.titlesize": 11,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 9,
+})
+
 _EXAMPLES_DIR = Path(__file__).resolve().parents[1]
 if str(_EXAMPLES_DIR) not in sys.path:
     sys.path.insert(0, str(_EXAMPLES_DIR))
@@ -39,7 +60,7 @@ from adaptive_spoofing.crazyflie_firmware_controllers import (
     create_scenarios, CANDIDATE_NAMES, QPS_DT,
     SeparatingInputOptimizer, optimize_parallel_gpu,
     simulate_true_trajectory, discriminate_controller,
-    observed_output,
+    observed_output, _BIAS_LIM, ATTITUDE_LIMIT_DEG,
 )
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
@@ -158,19 +179,46 @@ def main():
     for ax, name in zip(axes.flat, overlap_zero.keys()):
         ax.plot(t, overlap_zero[name], color="gray", linestyle="--", label="zero bias")
         ax.plot(t, overlap_opt[name], color="crimson", label="optimized spoof bias")
-        ax.set_title(name, fontsize=9)
+        ax.set_title(name)
         ax.set_yscale("symlog", linthresh=1e-8)
         ax.grid(alpha=0.3)
-    axes[0, 0].legend(fontsize=8)
+    axes[0, 0].legend()
     for ax in axes[-1, :]:
         ax.set_xlabel("time (s)")
     for ax in axes[:, 0]:
         ax.set_ylabel("observed-output\npairwise overlap volume")
     fig.suptitle("Real firmware controllers (cf_pid/cf_mellinger/cf_indi/cf_brescianini): "
-                "overlap under realistic per-axis-scaled initial uncertainty", fontsize=12)
+                f"overlap under realistic per-axis-scaled initial uncertainty\n"
+                f"(spoof bias projected onto the ${{\\pm}}{_BIAS_LIM:g}$ m box that keeps attitude "
+                f"within the firmware's {ATTITUDE_LIMIT_DEG:g}$^\\circ$ envelope)", fontsize=12)
     fig.tight_layout()
-    fig.savefig(RESULTS_DIR / "firmware_pairwise_overlap.png", dpi=150)
-    print(f"\nSaved {RESULTS_DIR / 'firmware_pairwise_overlap.png'}")
+    for ext in ("pdf", "png"):
+        fig.savefig(RESULTS_DIR / f"firmware_pairwise_overlap.{ext}",
+                    dpi=150, bbox_inches="tight")
+        print(f"\nSaved {RESULTS_DIR / f'firmware_pairwise_overlap.{ext}'}")
+
+    # ── Plot: the synthesized bias itself, against the projection box ──
+    figb, axb = plt.subplots(figsize=(7, 3.4))
+    # Each bias is held over [k*dt, (k+1)*dt), so the staircase needs one extra
+    # sample to close the final hold -- otherwise the last step is invisible and
+    # the trace appears to stop a tick early. Markers go on the real samples only.
+    tb = np.arange(NUM_STEPS + 1) * QPS_DT
+    ub = np.vstack([np.array(u_star), np.array(u_star)[-1:]])
+    for i, lab in enumerate(("bias $x$", "bias $y$", "bias $z$")):
+        line, = axb.step(tb, ub[:, i], where="post", label=lab)
+        axb.plot(tb[:NUM_STEPS], ub[:NUM_STEPS, i], "o", ms=3.5, color=line.get_color())
+    axb.axhline(_BIAS_LIM, color="k", ls="--", lw=1)
+    axb.axhline(-_BIAS_LIM, color="k", ls="--", lw=1,
+                label=fr"projection box $\pm{_BIAS_LIM:g}$ m")
+    axb.set_xlabel("time (s)")
+    axb.set_ylabel("spoof position bias (m)")
+    axb.set_title("Synthesized separating spoof bias under the attitude-derived input limit")
+    axb.grid(alpha=0.3)
+    axb.legend(ncol=2)
+    figb.tight_layout()
+    for ext in ("pdf", "png"):
+        figb.savefig(RESULTS_DIR / f"firmware_spoof_bias.{ext}", dpi=150, bbox_inches="tight")
+        print(f"Saved {RESULTS_DIR / f'firmware_spoof_bias.{ext}'}")
 
     # ── Save results ──
     out = {

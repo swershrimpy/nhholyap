@@ -435,11 +435,42 @@ def euler_step(emb_sys, x_ivl: irx.Interval, u: jnp.ndarray, p_ivl: irx.Interval
 # observed projection, never on the hidden memory block.
 # ══════════════════════════════════════════════════════════════════════════════
 
-_BIAS_LIM = 0.3   # meters, per axis -- same box as crazyflie_chain_controllers.py
+# Spoof-bias box, sized so the commanded attitude stays inside the FIRMWARE'S
+# OWN envelope (`ref.PID_VEL_RP_MAX` = 20 deg) rather than being an arbitrary
+# round number. Previously 0.3 m, copied from crazyflie_chain_controllers.py --
+# but that module's flat-output chain has no attitude state at all, so the
+# number carried no attitude meaning there and was never checked here.
+#
+# Derivation (measured on the nonlinear 12-D plant, see PLAN.md):
+# the bias enters the controllers only through the position error, so peak
+# |roll|,|pitch| is linear in the total APPARENT position error (d + b), where
+# d is the lateral setpoint offset and b this box. Measured slopes:
+#
+#     cf_pid  50.0 | cf_mellinger 101.8 | cf_indi 25.5 | cf_brescianini 69.0   deg/m
+#
+# cf_mellinger binds, giving d + b <= 20/101.8 = 0.196 m. With the hover
+# setpoint used here (d = 0) we take b = 0.15 m, leaving ~25% margin; a
+# lateral mission must shrink this box to 0.196 - d.
+#
+# NOTE this bounds the NOMINAL trajectory. Under interval propagation the
+# wrapping effect dominates at longer horizons -- at 10 steps even b = 0.10
+# admits a 53 deg attitude interval, which no input box can fix (it needs
+# refinement or a shorter horizon). At the 3-step horizon used here the
+# propagated bound is 11.9 deg (WIDE x0), comfortably inside the envelope.
+ATTITUDE_LIMIT_DEG = 20.0        # ref.PID_VEL_RP_MAX
+ATTITUDE_GAIN_DEG_PER_M = 101.8  # binding controller (cf_mellinger)
+_BIAS_LIM = 0.15                 # meters, per axis
 
 
 def _project_u(u: jnp.ndarray) -> jnp.ndarray:
     return jnp.clip(u, -_BIAS_LIM, _BIAS_LIM)
+
+
+def max_bias_for_setpoint(lateral_offset_m: float = 0.0) -> float:
+    """Largest per-axis spoof-bias box keeping peak attitude within the
+    firmware's 20 deg envelope for a mission with the given lateral setpoint
+    offset. Returns 0.0 if the setpoint alone already exceeds the envelope."""
+    return max(0.0, ATTITUDE_LIMIT_DEG / ATTITUDE_GAIN_DEG_PER_M - lateral_offset_m)
 
 
 def observed_output(x_ivl: irx.Interval) -> irx.Interval:
