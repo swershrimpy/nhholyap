@@ -7,8 +7,13 @@ Reads the six npz files written by success_rate_analysis.py and
 success_rate_analysis_early_stop.py -- 3 methods x 2 optimizer variants,
 each holding 84 configs (3 x0 centers x 14 initial-set half-widths
 0.02..0.15 x 2 actuator alpha-ranges) x 100 random GD restarts -- and plots
-restart-level success rate against initial-set half-width, one line per
+scenario-level success rate against initial-set half-width, one line per
 method, one panel per optimizer variant.
+
+Scenario-level means a configuration counts as solved when at least one of
+its 100 restarts drives the objective to zero -- multistart is part of the
+method, so the per-restart hit rate is an internal detail, not a reported
+capability. The restart-level fraction is deliberately NOT plotted.
 
 Panel (b) exists as a robustness check, not decoration: the two variants
 differ only in the GD loop (fixed 30 iterations under jax.lax.scan vs.
@@ -70,10 +75,17 @@ def load(prefix, method):
 
 
 def by_width(d):
-    """Restart-level success rate (%) aggregated per initial-set half-width."""
+    """Scenario-level success rate (%) per initial-set half-width.
+
+    A scenario (one configuration) counts as solved if ANY of its 100
+    restarts drove the objective below the threshold -- i.e. config_success,
+    not the fraction of restarts that succeeded. Six scenarios share each
+    half-width (3 initial-state centers x 2 actuator alpha-ranges), so each
+    plotted point is out of 6.
+    """
     w = np.round(d["x0_width"], 3)
     widths = np.array(sorted(set(w)))
-    return widths, np.array([d["restart_success_rate"][w == x].mean() * 100
+    return widths, np.array([d["config_success"][w == x].mean() * 100
                              for x in widths])
 
 
@@ -92,7 +104,7 @@ def make_figure(out_pdf: Path = _OUT):
         ax.set_ylim(-3, 103)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
-    axes[0].set_ylabel("Restart-level success rate (%)")
+    axes[0].set_ylabel("Scenario-level success rate (%)")
     axes[0].legend(frameon=False, loc="upper right", labelcolor=_INK)
     fig.tight_layout()
     fig.savefig(out_pdf, bbox_inches="tight")
@@ -102,13 +114,15 @@ def make_figure(out_pdf: Path = _OUT):
 
 if __name__ == "__main__":
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else _OUT
-    print(f"{'variant':12s}{'method':30s}{'configs':>12}{'restarts':>10}{'NaN':>6}")
+    print(f"{'variant':12s}{'method':30s}{'scenarios':>14}{'widest ok':>10}{'NaN':>6}")
     for prefix, title in VARIANTS:
         for mkey, mlabel, _, _ in METHODS:
             d = load(prefix, mkey)
-            cs, rs = d["config_success"], d["restart_success_rate"]
+            cs = d["config_success"]
             nan = int(np.isnan(d["losses_final_all_restarts"]).sum())
+            widths, vals = by_width(d)
+            last = widths[np.nonzero(vals)[0][-1]] if vals.any() else float("nan")
             print(f"{title[:11]:12s}{mlabel:30s}"
-                  f"{f'{int(cs.sum())}/{cs.size} ({cs.mean()*100:.1f}%)':>12}"
-                  f"{rs.mean()*100:>9.1f}%{nan:>6d}")
+                  f"{f'{int(cs.sum())}/{cs.size} ({cs.mean()*100:.1f}%)':>14}"
+                  f"{last:>10.2f}{nan:>6d}")
     print(f"\nWrote {make_figure(out)}")
