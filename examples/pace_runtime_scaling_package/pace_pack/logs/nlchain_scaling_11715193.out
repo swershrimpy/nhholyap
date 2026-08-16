@@ -1,0 +1,244 @@
+---------------------------------------
+Begin Slurm Prolog: Aug-06-2026 17:08:28
+Job ID:    11715193
+User ID:   xni32
+Account:   gts-scoogan3
+Job name:  nlchain-scaling
+Partition: gpu-v100
+QOS:       inferno
+---------------------------------------
+=== Slurm job 11715193 on atl1-1-01-003-35-0.pace.gatech.edu at Thu Aug  6 05:08:28 PM EDT 2026 ===
+REPO_ROOT: /storage/scratch1/9/xni32/nhholyap
+GPUs visible: 0
+Tesla V100-PCIE-16GB, 575.57.08, 16384 MiB
+Python: Python 3.11.15 @ /storage/scratch1/9/xni32/nhholyap/envs/immrax/bin/python
+JAX devices: [CudaDevice(id=0)]
+
+================================================================
+  UNREFINED scenario-count runtime/memory sweep
+  Started: Thu Aug  6 05:08:40 PM EDT 2026
+================================================================
+Devices: [CudaDevice(id=0)]
+Per-point limits: timeout=infs, mem_limit=infMB
+
+======================================================================
+UNREFINED MULTISTEP -- 3 scenarios (N=10)
+======================================================================
+OK      compile 11104.48 ms   run(avg)   3.760 ms   mem     170.8 KB   loss 0.000000   (elapsed 21.0s, peak_rss 1178 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 4 scenarios (N=10)
+======================================================================
+OK      compile 25253.17 ms   run(avg)   5.377 ms   mem     220.8 KB   loss 0.000000   (elapsed 29.5s, peak_rss 1216 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 5 scenarios (N=10)
+======================================================================
+OK      compile 41340.22 ms   run(avg)   7.727 ms   mem     273.2 KB   loss 0.000000   (elapsed 46.5s, peak_rss 1260 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 6 scenarios (N=10)
+======================================================================
+OK      compile 62731.99 ms   run(avg)   9.045 ms   mem     322.0 KB   loss 0.000000   (elapsed 72.0s, peak_rss 1304 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 7 scenarios (N=10)
+======================================================================
+OK      compile 107721.43 ms   run(avg)  17.999 ms   mem     368.2 KB   loss 0.000000   (elapsed 117.5s, peak_rss 1385 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 8 scenarios (N=10)
+======================================================================
+OK      compile 143036.75 ms   run(avg)  21.179 ms   mem     416.8 KB   loss 0.000000   (elapsed 154.0s, peak_rss 1440 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 9 scenarios (N=10)
+======================================================================
+OK      compile 163943.56 ms   run(avg)  21.347 ms   mem     469.5 KB   loss 0.000000   (elapsed 177.6s, peak_rss 1535 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 10 scenarios (N=10)
+======================================================================
+OK      compile 185339.61 ms   run(avg)  23.969 ms   mem     518.2 KB   loss 0.000000   (elapsed 202.1s, peak_rss 1678 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 11 scenarios (N=10)
+======================================================================
+OK      compile 223692.81 ms   run(avg)  26.963 ms   mem     569.0 KB   loss 0.000000   (elapsed 245.1s, peak_rss 1823 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 12 scenarios (N=10)
+======================================================================
+OK      compile 284925.98 ms   run(avg)  34.474 ms   mem     617.2 KB   loss 0.000000   (elapsed 338.7s, peak_rss 1984 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 13 scenarios (N=10)
+======================================================================
+OK      compile 359236.30 ms   run(avg)  38.814 ms   mem     669.2 KB   loss 0.000000   (elapsed 533.2s, peak_rss 2246 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 14 scenarios (N=10)
+======================================================================
+OK      compile 425243.22 ms   run(avg)  29.028 ms   mem     717.5 KB   loss 0.000000   (elapsed 698.8s, peak_rss 2356 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 15 scenarios (N=10)
+======================================================================
+OK      compile 450529.71 ms   run(avg)  77.945 ms   mem     773.0 KB   loss 0.000000   (elapsed 934.3s, peak_rss 2563 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 16 scenarios (N=10)
+======================================================================
+OK      compile 473536.50 ms   run(avg)  78.340 ms   mem     822.2 KB   loss 0.000000   (elapsed 756.8s, peak_rss 2883 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 17 scenarios (N=10)
+======================================================================
+OK      compile 562033.33 ms   run(avg)  77.437 ms   mem     875.8 KB   loss 0.000000   (elapsed 866.3s, peak_rss 3167 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 18 scenarios (N=10)
+======================================================================
+OK      compile 644379.15 ms   run(avg)  86.311 ms   mem     944.5 KB   loss 0.000000   (elapsed 1007.4s, peak_rss 3383 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 19 scenarios (N=10)
+======================================================================
+OK      compile 739161.26 ms   run(avg)  86.042 ms   mem    1018.8 KB   loss 0.000000   (elapsed 1035.4s, peak_rss 3626 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 20 scenarios (N=10)
+======================================================================
+OK      compile 758406.05 ms   run(avg) 119.110 ms   mem    1035.8 KB   loss 0.000000   (elapsed 1055.0s, peak_rss 3890 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 21 scenarios (N=10)
+======================================================================
+OK      compile 819545.95 ms   run(avg) 116.796 ms   mem    1196.0 KB   loss 0.000000   (elapsed 1112.5s, peak_rss 4134 MB)
+
+Done. Scenario-count runtime/memory data written to /storage/scratch1/9/xni32/nhholyap/examples/nonlinear_chain/unrefined_scenario_scaling.csv
+Unrefined sweep complete at Thu Aug  6 07:45:26 PM EDT 2026
+
+================================================================
+  REFINED (intersection-refinement) scenario-count runtime/memory sweep
+  Started: Thu Aug  6 07:45:26 PM EDT 2026
+================================================================
+Devices: [CudaDevice(id=0)]
+Per-point limits: timeout=infs, mem_limit=infMB
+
+======================================================================
+REFINED MULTISTEP -- 3 scenarios (N=10)
+======================================================================
+OK      compile 26899.39 ms   run(avg)   5.373 ms   mem     452.2 KB   loss 0.000000   (elapsed 132.6s, peak_rss 1151 MB)
+
+======================================================================
+REFINED MULTISTEP -- 4 scenarios (N=10)
+======================================================================
+OK      compile 60672.97 ms   run(avg)  10.723 ms   mem     744.2 KB   loss 0.000000   (elapsed 73.6s, peak_rss 1447 MB)
+
+======================================================================
+REFINED MULTISTEP -- 5 scenarios (N=10)
+======================================================================
+OK      compile 160522.57 ms   run(avg)  22.338 ms   mem     840.5 KB   loss 0.000000   (elapsed 229.6s, peak_rss 1692 MB)
+
+======================================================================
+REFINED MULTISTEP -- 6 scenarios (N=10)
+======================================================================
+OK      compile 210494.82 ms   run(avg)  30.483 ms   mem    1527.8 KB   loss 0.000000   (elapsed 554.2s, peak_rss 1853 MB)
+
+======================================================================
+REFINED MULTISTEP -- 7 scenarios (N=10)
+======================================================================
+OK      compile 264878.13 ms   run(avg)  56.566 ms   mem    2497.8 KB   loss 0.000000   (elapsed 613.7s, peak_rss 2193 MB)
+
+======================================================================
+REFINED MULTISTEP -- 8 scenarios (N=10)
+======================================================================
+OK      compile 327948.15 ms   run(avg)  72.709 ms   mem    3123.0 KB   loss 0.000000   (elapsed 655.3s, peak_rss 2556 MB)
+
+======================================================================
+REFINED MULTISTEP -- 9 scenarios (N=10)
+======================================================================
+OK      compile 411000.90 ms   run(avg)  94.286 ms   mem    4679.5 KB   loss 0.000000   (elapsed 723.3s, peak_rss 2988 MB)
+
+======================================================================
+REFINED MULTISTEP -- 10 scenarios (N=10)
+======================================================================
+OK      compile 508741.16 ms   run(avg) 111.262 ms   mem    4341.8 KB   loss 0.000000   (elapsed 770.8s, peak_rss 3303 MB)
+
+======================================================================
+REFINED MULTISTEP -- 11 scenarios (N=10)
+======================================================================
+OK      compile 662678.15 ms   run(avg) 146.283 ms   mem    7428.8 KB   loss 0.000000   (elapsed 923.4s, peak_rss 4111 MB)
+
+======================================================================
+REFINED MULTISTEP -- 12 scenarios (N=10)
+======================================================================
+OK      compile 744093.50 ms   run(avg) 170.172 ms   mem    8190.5 KB   loss 0.000000   (elapsed 1017.4s, peak_rss 4699 MB)
+
+======================================================================
+REFINED MULTISTEP -- 13 scenarios (N=10)
+======================================================================
+OK      compile 940072.52 ms   run(avg) 207.974 ms   mem    9338.2 KB   loss 0.000000   (elapsed 1209.5s, peak_rss 5460 MB)
+
+======================================================================
+REFINED MULTISTEP -- 14 scenarios (N=10)
+======================================================================
+OK      compile 1033215.46 ms   run(avg) 229.728 ms   mem   10897.5 KB   loss 0.000000   (elapsed 1300.5s, peak_rss 6082 MB)
+
+======================================================================
+REFINED MULTISTEP -- 15 scenarios (N=10)
+======================================================================
+OK      compile 1206518.98 ms   run(avg) 276.024 ms   mem   12981.2 KB   loss 0.000000   (elapsed 1452.2s, peak_rss 6837 MB)
+
+======================================================================
+REFINED MULTISTEP -- 16 scenarios (N=10)
+======================================================================
+OK      compile 1488733.72 ms   run(avg) 331.988 ms   mem   14506.8 KB   loss 0.000000   (elapsed 1735.0s, peak_rss 7613 MB)
+
+======================================================================
+REFINED MULTISTEP -- 17 scenarios (N=10)
+======================================================================
+OK      compile 1564591.44 ms   run(avg) 349.048 ms   mem   19040.5 KB   loss 0.000000   (elapsed 1857.7s, peak_rss 8425 MB)
+
+======================================================================
+REFINED MULTISTEP -- 18 scenarios (N=10)
+======================================================================
+OK      compile 1773078.67 ms   run(avg) 397.610 ms   mem   19912.8 KB   loss 0.000000   (elapsed 2033.8s, peak_rss 9309 MB)
+
+======================================================================
+REFINED MULTISTEP -- 19 scenarios (N=10)
+======================================================================
+OK      compile 2073264.39 ms   run(avg) 446.139 ms   mem   21916.5 KB   loss 0.000000   (elapsed 2332.3s, peak_rss 11157 MB)
+
+======================================================================
+REFINED MULTISTEP -- 20 scenarios (N=10)
+======================================================================
+OK      compile 2398414.81 ms   run(avg) 514.582 ms   mem   23802.8 KB   loss 0.000000   (elapsed 2617.9s, peak_rss 12915 MB)
+
+======================================================================
+REFINED MULTISTEP -- 21 scenarios (N=10)
+======================================================================
+OK      compile 2731571.40 ms   run(avg) 561.846 ms   mem   25487.2 KB   loss 0.000000   (elapsed 2933.1s, peak_rss 14426 MB)
+
+Done. Scenario-count runtime/memory data written to /storage/scratch1/9/xni32/nhholyap/examples/nonlinear_chain/refined_scenario_scaling.csv
+Refined sweep complete at Fri Aug  7 02:13:21 AM EDT 2026
+
+================================================================
+  ALL STAGES COMPLETE at Fri Aug  7 02:13:21 AM EDT 2026
+  CSVs written to:
+    /storage/scratch1/9/xni32/nhholyap/examples/nonlinear_chain/unrefined_scenario_scaling.csv
+    /storage/scratch1/9/xni32/nhholyap/examples/nonlinear_chain/refined_scenario_scaling.csv
+================================================================
+---------------------------------------
+Begin Slurm Epilog: Aug-07-2026 02:13:21
+Job ID:        11715193
+User ID:       xni32
+Account:       gts-scoogan3
+Job name:      nlchain-scaling
+Resources:     cpu=8,gres/gpu:v100=1,mem=80G,node=1
+Rsrc Used:     cput=3-00:39:12,vmem=0,walltime=09:04:54,mem=17499096K,energy_used=0
+Partition:     gpu-v100
+QOS:           inferno
+Nodes:         atl1-1-01-003-35-0
+---------------------------------------

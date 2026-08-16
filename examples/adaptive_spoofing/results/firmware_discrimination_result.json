@@ -1,0 +1,104 @@
+{
+  "candidate_names": [
+    "cf_pid",
+    "cf_mellinger",
+    "cf_indi",
+    "cf_brescianini"
+  ],
+  "tight_regime": {
+    "width": 0.001,
+    "loss_at_zero_bias": 0.0,
+    "ground_truth_survives": {
+      "cf_pid": true,
+      "cf_mellinger": true,
+      "cf_indi": true,
+      "cf_brescianini": true
+    }
+  },
+  "wide_regime": {
+    "width": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.017,
+      0.017,
+      0.017,
+      0.05,
+      0.05,
+      0.05,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "loss_at_zero_bias": 3.352345841890392e-10,
+    "loss_at_optimized_bias": 1.9928766928056341e-10,
+    "u_star": [
+      [
+        -0.12448316117835241,
+        0.15,
+        -0.05913939729835687
+      ],
+      [
+        0.006823851107399957,
+        -0.01272751284230929,
+        0.09243061974052864
+      ],
+      [
+        -0.006717779320699084,
+        -0.09275947939562158,
+        -0.03456818690044073
+      ]
+    ],
+    "pairwise_overlaps_optimized": {
+      "cf_pid vs cf_mellinger": 1.567899975770073e-06,
+      "cf_pid vs cf_indi": 1.1684454489829283e-07,
+      "cf_pid vs cf_brescianini": 1.8389129878031826e-06,
+      "cf_mellinger vs cf_indi": 0.0,
+      "cf_mellinger vs cf_brescianini": 8.307944929382253e-07,
+      "cf_indi vs cf_brescianini": 1.9172223279267243e-07
+    },
+    "w_bar_used": 0.001,
+    "ground_truth_survives": {
+      "cf_pid": true,
+      "cf_mellinger": true,
+      "cf_indi": true,
+      "cf_brescianini": true
+    },
+    "fail_steps": {
+      "cf_pid": {
+        "cf_pid": -1,
+        "cf_mellinger": 1,
+        "cf_indi": 0,
+        "cf_brescianini": 1
+      },
+      "cf_mellinger": {
+        "cf_pid": 0,
+        "cf_mellinger": -1,
+        "cf_indi": 0,
+        "cf_brescianini": 1
+      },
+      "cf_indi": {
+        "cf_pid": 1,
+        "cf_mellinger": 0,
+        "cf_indi": -1,
+        "cf_brescianini": 1
+      },
+      "cf_brescianini": {
+        "cf_pid": 1,
+        "cf_mellinger": 1,
+        "cf_indi": 0,
+        "cf_brescianini": -1
+      }
+    }
+  },
+  "all_ground_truth_checks_passed": true
+}
