@@ -1,0 +1,68 @@
+---------------------------------------
+Begin Slurm Prolog: Aug-09-2026 23:53:25
+Job ID:    11775727
+User ID:   xni32
+Account:   gts-scoogan3-fy20phase3
+Job name:  admire-single_step
+Partition: gpu-v100
+QOS:       inferno
+---------------------------------------
+=== Slurm job 11775727 (METHOD=single_step) on atl1-1-02-005-27-0.pace.gatech.edu at Sun Aug  9 23:53:25 EDT 2026 ===
+REPO_ROOT: /storage/scratch1/9/xni32/nhholyap
+GPUs visible: 0
+Tesla V100-PCIE-16GB, 575.57.08, 16384 MiB
+Python: Python 3.11.15 @ /storage/scratch1/9/xni32/nhholyap/envs/immrax/bin/python
+JAX devices: [CudaDevice(id=0)]
+
+================================================================
+  admire success-rate analysis -- method=single_step, all horizons
+  Started: Sun Aug  9 23:59:03 EDT 2026
+================================================================
+Devices: [CudaDevice(id=0)]
+Config grid: 3 input_limits x 3 x0_widths = 9 configs, per (method, horizon)
+Horizons: [0.5, 1.0, 2.0]  |  11 fault scenarios (unchanged)
+Per (method, horizon): 20 restarts x 100 GD iters, success threshold = 1e-06
+
+==============================================================================
+SINGLE-STEP  |  horizon=0.5s (5 steps)
+==============================================================================
+compile 1627568.05 ms total (180840.895 ms/config)   run 21997.462 ms total (2444.162 ms/config)   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 428674816.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+Config success rate: 0/9 (0.0%)
+Saved full data -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_data_single_step_0.5s.npz
+
+==============================================================================
+SINGLE-STEP  |  horizon=1.0s (10 steps)
+==============================================================================
+compile 1662091.73 ms total (184676.859 ms/config)   run 41039.509 ms total (4559.945 ms/config)   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 854514688.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+Config success rate: 1/9 (11.1%)
+Saved full data -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_data_single_step_1.0s.npz
+
+==============================================================================
+SINGLE-STEP  |  horizon=2.0s (20 steps)
+==============================================================================
+compile 1702010.98 ms total (189112.331 ms/config)   run 79273.637 ms total (8808.182 ms/config)   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 1702605312.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+Config success rate: 1/9 (11.1%)
+Saved full data -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_data_single_step_2.0s.npz
+
+Wrote summary CSV -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_summary_single_step.csv
+
+==============================================================================
+SUMMARY
+==============================================================================
+  single_step            @   0.5s: success   0.0%   compile 1627.57s total   run 21997.46 ms total   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 428674816.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+  single_step            @   1.0s: success  11.1%   compile 1662.09s total   run 41039.51 ms total   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 854514688.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+  single_step            @   2.0s: success  11.1%   compile 1702.01s total   run 79273.64 ms total   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 1702605312.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+
+admire success-rate analysis (method=single_step) complete at Mon Aug 10 01:30:38 EDT 2026
+---------------------------------------
+Begin Slurm Epilog: Aug-10-2026 01:30:38
+Job ID:        11775727
+User ID:       xni32
+Account:       gts-scoogan3-fy20phase3
+Job name:      admire-single_step
+Resources:     cpu=8,gres/gpu:v100=1,mem=150G,node=1
+Rsrc Used:     cput=12:58:24,vmem=0,walltime=01:37:18,mem=71312680K,energy_used=0
+Partition:     gpu-v100
+QOS:           inferno
+Nodes:         atl1-1-02-005-27-0
+---------------------------------------

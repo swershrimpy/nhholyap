@@ -1,0 +1,68 @@
+---------------------------------------
+Begin Slurm Prolog: Aug-09-2026 23:53:24
+Job ID:    11775728
+User ID:   xni32
+Account:   gts-scoogan3-fy20phase3
+Job name:  admire-multistep_unrefined
+Partition: gpu-v100
+QOS:       inferno
+---------------------------------------
+=== Slurm job 11775728 (METHOD=multistep_unrefined) on atl1-1-02-008-32-0.pace.gatech.edu at Sun Aug  9 23:53:24 EDT 2026 ===
+REPO_ROOT: /storage/scratch1/9/xni32/nhholyap
+GPUs visible: 0
+Tesla V100-PCIE-16GB, 575.57.08, 16384 MiB
+Python: Python 3.11.15 @ /storage/scratch1/9/xni32/nhholyap/envs/immrax/bin/python
+JAX devices: [CudaDevice(id=0)]
+
+================================================================
+  admire success-rate analysis -- method=multistep_unrefined, all horizons
+  Started: Sun Aug  9 23:59:03 EDT 2026
+================================================================
+Devices: [CudaDevice(id=0)]
+Config grid: 3 input_limits x 3 x0_widths = 9 configs, per (method, horizon)
+Horizons: [0.5, 1.0, 2.0]  |  11 fault scenarios (unchanged)
+Per (method, horizon): 20 restarts x 100 GD iters, success threshold = 1e-06
+
+==============================================================================
+MULTISTEP UNREFINED  |  horizon=0.5s (5 steps)
+==============================================================================
+compile 317480.24 ms total (35275.583 ms/config)   run 2547.059 ms total (283.007 ms/config)   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 445423616.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+Config success rate: 0/9 (0.0%)
+Saved full data -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_data_multistep_unrefined_0.5s.npz
+
+==============================================================================
+MULTISTEP UNREFINED  |  horizon=1.0s (10 steps)
+==============================================================================
+compile 392218.84 ms total (43579.871 ms/config)   run 4888.070 ms total (543.119 ms/config)   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 877928448.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+Config success rate: 1/9 (11.1%)
+Saved full data -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_data_multistep_unrefined_1.0s.npz
+
+==============================================================================
+MULTISTEP UNREFINED  |  horizon=2.0s (20 steps)
+==============================================================================
+compile 642471.80 ms total (71385.755 ms/config)   run 9581.109 ms total (1064.568 ms/config)   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 1746616576.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+Config success rate: 3/9 (33.3%)
+Saved full data -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_data_multistep_unrefined_2.0s.npz
+
+Wrote summary CSV -> /storage/scratch1/9/xni32/nhholyap/examples/admire/admire_success_rate_summary_multistep_unrefined.csv
+
+==============================================================================
+SUMMARY
+==============================================================================
+  multistep_unrefined    @   0.5s: success   0.0%   compile  317.48s total   run  2547.06 ms total   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 445423616.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+  multistep_unrefined    @   1.0s: success  11.1%   compile  392.22s total   run  4888.07 ms total   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 877928448.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+  multistep_unrefined    @   2.0s: success  33.3%   compile  642.47s total   run  9581.11 ms total   mem {'bytes_in_use': 8704.0, 'peak_bytes_in_use': 1746616576.0, 'bytes_limit': 12696256512.0, 'bytes_reserved': 0.0, 'peak_bytes_reserved': 0.0, 'largest_free_block_bytes': 0.0, 'pool_bytes': 12696256512.0, 'peak_pool_bytes': 12696256512.0}
+
+admire success-rate analysis (method=multistep_unrefined) complete at Mon Aug 10 00:25:33 EDT 2026
+---------------------------------------
+Begin Slurm Epilog: Aug-10-2026 00:25:34
+Job ID:        11775728
+User ID:       xni32
+Account:       gts-scoogan3-fy20phase3
+Job name:      admire-multistep_unrefined
+Resources:     cpu=8,gres/gpu:v100=1,mem=150G,node=1
+Rsrc Used:     cput=04:17:52,vmem=0,walltime=00:32:14,mem=9159496K,energy_used=0
+Partition:     gpu-v100
+QOS:           inferno
+Nodes:         atl1-1-02-008-32-0
+---------------------------------------

@@ -1,0 +1,137 @@
+---------------------------------------
+Begin Slurm Prolog: Aug-06-2026 16:20:04
+Job ID:    11714252
+User ID:   xni32
+Account:   gts-scoogan3
+Job name:  nlchain-scaling
+Partition: gpu-v100
+QOS:       inferno
+---------------------------------------
+=== Slurm job 11714252 on atl1-1-03-002-31-0.pace.gatech.edu at Thu Aug  6 04:20:04 PM EDT 2026 ===
+REPO_ROOT: /storage/scratch1/9/xni32/nhholyap
+GPUs visible: 0
+Tesla V100-PCIE-32GB, 575.57.08, 32768 MiB
+Python: Python 3.11.15 @ /storage/scratch1/9/xni32/nhholyap/envs/immrax/bin/python
+JAX devices: [CudaDevice(id=0)]
+
+================================================================
+  UNREFINED scenario-count runtime/memory sweep
+  Started: Thu Aug  6 04:20:20 PM EDT 2026
+================================================================
+Devices: [CudaDevice(id=0)]
+Per-point limits: timeout=150.0s, mem_limit=4096.0MB
+
+======================================================================
+UNREFINED MULTISTEP -- 3 scenarios (N=10)
+======================================================================
+OK      compile 14970.37 ms   run(avg)   3.821 ms   mem     170.8 KB   loss 0.000000   (elapsed 49.0s, peak_rss 1485 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 4 scenarios (N=10)
+======================================================================
+OK      compile 25131.68 ms   run(avg)   5.516 ms   mem     220.8 KB   loss 0.000000   (elapsed 33.5s, peak_rss 1598 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 5 scenarios (N=10)
+======================================================================
+OK      compile 43511.66 ms   run(avg)   7.830 ms   mem     273.2 KB   loss 0.000000   (elapsed 54.0s, peak_rss 1641 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 6 scenarios (N=10)
+======================================================================
+OK      compile 61355.54 ms   run(avg)   8.974 ms   mem     322.0 KB   loss 0.000000   (elapsed 71.5s, peak_rss 1687 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 7 scenarios (N=10)
+======================================================================
+OK      compile 107429.48 ms   run(avg)  18.151 ms   mem     368.2 KB   loss 0.000000   (elapsed 117.5s, peak_rss 1757 MB)
+
+======================================================================
+UNREFINED MULTISTEP -- 8 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=1822.3MB
+
+======================================================================
+UNREFINED MULTISTEP -- 9 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=1915.8MB
+
+======================================================================
+UNREFINED MULTISTEP -- 10 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=2068.6MB
+
+======================================================================
+UNREFINED MULTISTEP -- 11 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=2141.2MB
+
+======================================================================
+UNREFINED MULTISTEP -- 12 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=2335.8MB
+
+======================================================================
+UNREFINED MULTISTEP -- 13 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=2516.7MB
+
+======================================================================
+UNREFINED MULTISTEP -- 14 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=2621.4MB
+
+======================================================================
+UNREFINED MULTISTEP -- 15 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.2s peak_rss=2743.6MB
+
+======================================================================
+UNREFINED MULTISTEP -- 16 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.3s peak_rss=3076.3MB
+
+======================================================================
+UNREFINED MULTISTEP -- 17 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.3s peak_rss=3392.3MB
+
+======================================================================
+UNREFINED MULTISTEP -- 18 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.3s peak_rss=3583.9MB
+
+======================================================================
+UNREFINED MULTISTEP -- 19 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.3s peak_rss=3856.2MB
+
+======================================================================
+UNREFINED MULTISTEP -- 20 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.3s peak_rss=3789.3MB
+
+======================================================================
+UNREFINED MULTISTEP -- 21 scenarios (N=10)
+======================================================================
+TIMEOUT killed (timeout): elapsed=150.3s peak_rss=3724.1MB
+
+Done. Scenario-count runtime/memory data written to /storage/scratch1/9/xni32/nhholyap/examples/nonlinear_chain/unrefined_scenario_scaling.csv
+Unrefined sweep complete at Thu Aug  6 05:01:11 PM EDT 2026
+
+================================================================
+  REFINED (intersection-refinement) scenario-count runtime/memory sweep
+  Started: Thu Aug  6 05:01:11 PM EDT 2026
+================================================================
+---------------------------------------
+Begin Slurm Epilog: Aug-06-2026 17:06:05
+Job ID:        11714252
+User ID:       xni32
+Account:       gts-scoogan3
+Job name:      nlchain-scaling
+Resources:     cpu=8,gres/gpu:v100=1,mem=32G,node=1
+Rsrc Used:     cput=06:08:00,vmem=0,walltime=00:46:00,mem=4104140K,energy_used=0
+Partition:     gpu-v100
+QOS:           inferno
+Nodes:         atl1-1-03-002-31-0
+---------------------------------------
