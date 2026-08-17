@@ -3,17 +3,22 @@ Companion plotting script for unrefined_horizon_scaling.py /
 refined_horizon_scaling.py's PLANNING-HORIZON runtime/RAM/VRAM sweeps.
 
 Reads unrefined_horizon_scaling.csv and refined_horizon_scaling.csv (one row
-per horizon length, N=10 and num_scenarios=7 both fixed) and produces THREE
-two-panel (run time, host RAM) figures rather than one combined figure:
-  - horizon_runtime_scaling_unrefined.pdf -- unrefined multistep only
-  - horizon_runtime_scaling_refined.pdf   -- refined multistep only
-  - horizon_runtime_scaling_combined.pdf  -- both overlaid (same two panels)
-Splitting the single-optimizer figures out lets each stand alone (e.g. in a
-paper section that only discusses one of the two paths) while the combined
-figure keeps the direct visual comparison. Compile time and GPU VRAM are not
-in these three -- see plot_scenario_runtime_scaling.py or this file's git
-history for the earlier four-panel (compile/run/RAM/VRAM) version if those
-are wanted again.
+per horizon length, N=10 and num_scenarios=7 both fixed) and produces SIX
+single-panel figures -- one metric (run time or host RAM) crossed with one
+scope (unrefined only, refined only, both overlaid):
+  - horizon_runtime_scaling_unrefined_runtime.pdf
+  - horizon_runtime_scaling_unrefined_ram.pdf
+  - horizon_runtime_scaling_refined_runtime.pdf
+  - horizon_runtime_scaling_refined_ram.pdf
+  - horizon_runtime_scaling_combined_runtime.pdf
+  - horizon_runtime_scaling_combined_ram.pdf
+Run time and host RAM are always separate figures, never two panels or a
+twin axis on one figure -- their units (ms vs. MB) aren't comparable on a
+shared scale. GPU VRAM and compile time are not plotted here: VRAM stays
+in the single-digit MB range across the whole horizon sweep (see this
+file's git history for the earlier four-panel compile/run/RAM/VRAM
+version, if that's wanted again) and isn't a significant contributor next
+to host RAM's multi-GB range.
 
 Host RAM here is peak_rss_mb -- the worker subprocess's own peak RSS,
 externally polled from /proc by the driver (see
@@ -44,9 +49,7 @@ import matplotlib.pyplot as plt
 from unrefined_horizon_scaling import CSV_PATH as UNREFINED_CSV_PATH
 from refined_horizon_scaling import CSV_PATH as REFINED_CSV_PATH
 
-OUT_PDF_UNREFINED = _HERE / "horizon_runtime_scaling_unrefined.pdf"
-OUT_PDF_REFINED = _HERE / "horizon_runtime_scaling_refined.pdf"
-OUT_PDF_COMBINED = _HERE / "horizon_runtime_scaling_combined.pdf"
+_OUT_STEM = _HERE / "horizon_runtime_scaling"
 
 # Categorical slots 1/2 from the project's validated palette (light mode):
 # same blue-for-unrefined / orange-for-refined assignment as
@@ -95,40 +98,42 @@ def _report_failures(rows, label):
               f"elapsed={r['elapsed_s']}s  peak_rss={r['peak_rss_mb']}MB")
 
 
-def make_plot(series, out_path: Path, subtitle: str):
+_METRICS = {
+    "runtime": ("run_time_avg_ms", "Run time (ms)", "Post-compilation run time"),
+    "ram": ("peak_rss_mb", "Host RAM (MB)", "Peak host RAM"),
+}
+
+
+def make_plot(series, key: str, ylabel: str, title: str, out_path: Path):
     """series: list of (rows, color, label) tuples -- one entry for a
     single-optimizer figure, two (unrefined + refined) for the overlaid
-    comparison. Always two panels: run time and host RAM vs. horizon."""
-    fig, (ax_run, ax_ram) = plt.subplots(1, 2, figsize=(11, 4.4))
+    comparison. Always a single panel, one metric (given by `key`) vs.
+    horizon -- run time and host RAM are never on the same axes (different
+    units, ms vs. MB)."""
+    fig, ax = plt.subplots(figsize=(6, 4.4))
 
-    for ax, key, ylabel, title in (
-        (ax_run, "run_time_avg_ms", "Run time (ms)", "Post-compilation run time"),
-        (ax_ram, "peak_rss_mb", "Host RAM (MB)", "Peak host RAM"),
-    ):
-        for rows, color, label in series:
-            ok_rows = [r for r in rows if r["status"] == "ok"]
-            xs = [r["horizon_s"] for r in ok_rows]
-            ys = [r[key] for r in ok_rows]
-            ax.plot(xs, ys, color=color, linewidth=2, marker='o', markersize=5, label=label)
+    for rows, color, label in series:
+        ok_rows = [r for r in rows if r["status"] == "ok"]
+        xs = [r["horizon_s"] for r in ok_rows]
+        ys = [r[key] for r in ok_rows]
+        ax.plot(xs, ys, color=color, linewidth=2, marker='o', markersize=5, label=label)
 
-            # Mark the first horizon that failed to complete (if any) with a
-            # dashed vertical line in this series' color, so a truncated
-            # curve reads as "hit a resource limit here", not a missing point.
-            failed = sorted(r["horizon_s"] for r in rows if r["status"] != "ok")
-            if failed:
-                ax.axvline(failed[0], color=color, linestyle='--', linewidth=1, alpha=0.6)
+        # Mark the first horizon that failed to complete (if any) with a
+        # dashed vertical line in this series' color, so a truncated curve
+        # reads as "hit a resource limit here", not a missing point.
+        failed = sorted(r["horizon_s"] for r in rows if r["status"] != "ok")
+        if failed:
+            ax.axvline(failed[0], color=color, linestyle='--', linewidth=1, alpha=0.6)
 
-        ax.set_xlabel("Planning horizon (s)")
-        ax.set_ylabel(ylabel)
-        ax.set_title(title)
-        ax.grid(True, color="0.85", linewidth=0.8)
-        for spine in ("top", "right"):
-            ax.spines[spine].set_visible(False)
+    ax.set_xlabel("Planning horizon (s)")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, color="0.85", linewidth=0.8)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
 
     if len(series) > 1:
-        ax_run.legend(frameon=False)
-    fig.suptitle(f"nonlinear_chain (N=10, 7 fault scenarios) -- {subtitle}\n"
-                 "(dashed line = first horizon that timed out / hit the memory cap)")
+        ax.legend(frameon=False)
+    ax.set_title(f"nonlinear_chain (N=10, 7 fault scenarios)\n{title}")
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches='tight')
     plt.close(fig)
@@ -147,14 +152,14 @@ if __name__ == "__main__":
     unrefined_series = (unrefined_rows, _COLOR_UNREFINED, "Unrefined multistep")
     refined_series = (refined_rows, _COLOR_REFINED, "Refined multistep")
 
-    out1 = make_plot([unrefined_series], OUT_PDF_UNREFINED,
-                      "unrefined multistep, planning-horizon run time/RAM scaling")
-    print(f"\nWrote plot: {out1}")
+    scopes = (
+        ("unrefined", [unrefined_series]),
+        ("refined", [refined_series]),
+        ("combined", [unrefined_series, refined_series]),
+    )
 
-    out2 = make_plot([refined_series], OUT_PDF_REFINED,
-                      "refined multistep, planning-horizon run time/RAM scaling")
-    print(f"Wrote plot: {out2}")
-
-    out3 = make_plot([unrefined_series, refined_series], OUT_PDF_COMBINED,
-                      "planning-horizon run time/RAM scaling")
-    print(f"Wrote plot: {out3}")
+    for scope_name, series in scopes:
+        for metric_name, (key, ylabel, title) in _METRICS.items():
+            out_path = Path(f"{_OUT_STEM}_{scope_name}_{metric_name}.pdf")
+            make_plot(series, key, ylabel, title, out_path)
+            print(f"Wrote plot: {out_path}")
