@@ -89,6 +89,7 @@ from integrator_separating_input import (
     _run_unrolled_or_loop,
     _run_unrolled_or_loop_nocheckpoint,
     time_jit,
+    HOST_PEAK_RSS,
 )
 
 from typing import List
@@ -217,6 +218,7 @@ def optimize_refined_gpu_stable(x0_ivl: irx.Interval, scenarios: List[Scenario],
 
 
 def run_for_order(N: int, num_restarts: int = 30, num_iters: int = 20, learning_rate: float = 0.15):
+    HOST_PEAK_RSS.reset()
     print(f"\n{'=' * 70}\nINTERSECTION REFINEMENT (stable) vs. UNREFINED -- order N={N}\n{'=' * 70}")
 
     scenarios = create_scenarios(N)
@@ -259,6 +261,7 @@ def run_for_order(N: int, num_restarts: int = 30, num_iters: int = 20, learning_
 
 if __name__ == "__main__":
     print("Devices:", jax.devices())
+    HOST_PEAK_RSS.start()
     for N in range(2, 101):
         run_for_order(N)
     print("\nDone.")
