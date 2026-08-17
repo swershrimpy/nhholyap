@@ -39,7 +39,16 @@ HOVER_POS = jnp.array([0.0, 0.0, 1.0])   # matches the QPS validation run's sett
 def main():
     ref15 = hover_reference(HOVER_POS)
     scenarios = create_scenarios(ref15)
-    x0_ivl = irx.icentpert(jnp.zeros(18), jnp.full(18, 1e-3))
+    # TIGHT regime half-width: 2mm (updated from the original 1mm). Checked
+    # first, same as run_firmware_discrimination.py does for its own tight
+    # regime: refined_overlap_loss at ZERO bias is already 0.0 at this width
+    # too (as it was at 1mm), so a synthesized bias is not strictly necessary
+    # for separation here either -- the optimizer below still runs and (per
+    # the unchanged 1mm result, max|bias|=0.3 despite zero bias also working)
+    # is expected to land on some other zero-loss point in that flat region,
+    # not on zero itself. This mirrors the ALREADY-existing behavior at 1mm,
+    # not a new phenomenon introduced by widening to 2mm.
+    x0_ivl = irx.icentpert(jnp.zeros(18), jnp.full(18, 2e-3))
 
     print(f"Synthesizing a {NUM_STEPS}-step separating spoof bias over all 4 controllers...")
     t0 = time.perf_counter()

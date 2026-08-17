@@ -40,31 +40,31 @@
       0.01
     ],
     "loss_at_zero_bias": 3.352345841890392e-10,
-    "loss_at_optimized_bias": 1.9928766928056341e-10,
+    "loss_at_optimized_bias": 2.4207658955322317e-10,
     "u_star": [
       [
-        -0.12448316117835241,
         0.15,
-        -0.05913939729835687
+        -0.035710988129204986,
+        0.00024084121093420353
       ],
       [
-        0.006823851107399957,
-        -0.01272751284230929,
-        0.09243061974052864
+        0.07873312092256635,
+        -0.05257076121350648,
+        -0.11730924386139827
       ],
       [
-        -0.006717779320699084,
-        -0.09275947939562158,
-        -0.03456818690044073
+        0.10772316439201396,
+        -0.00933969176526053,
+        0.006994808539505184
       ]
     ],
     "pairwise_overlaps_optimized": {
-      "cf_pid vs cf_mellinger": 1.567899975770073e-06,
-      "cf_pid vs cf_indi": 1.1684454489829283e-07,
-      "cf_pid vs cf_brescianini": 1.8389129878031826e-06,
+      "cf_pid vs cf_mellinger": 1.4307750639736057e-06,
+      "cf_pid vs cf_indi": 1.1745501821252155e-07,
+      "cf_pid vs cf_brescianini": 1.8632703581891933e-06,
       "cf_mellinger vs cf_indi": 0.0,
-      "cf_mellinger vs cf_brescianini": 8.307944929382253e-07,
-      "cf_indi vs cf_brescianini": 1.9172223279267243e-07
+      "cf_mellinger vs cf_brescianini": 4.573533777415675e-07,
+      "cf_indi vs cf_brescianini": 1.90201633529766e-07
     },
     "w_bar_used": 0.001,
     "ground_truth_survives": {

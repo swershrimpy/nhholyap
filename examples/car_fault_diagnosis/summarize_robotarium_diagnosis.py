@@ -15,6 +15,19 @@ artifact of the sweep's own optimizer stepsize, not a soundness finding (see
 robotarium_diagnosis_mc.py's docstring), and are not reported by default.
 Pass --coarse to also print that table, clearly separated and labeled.
 
+Reports "correct" as (correct + inconclusive) -- i.e. any trial where the
+true model was never wrongly excluded, whether or not another (false) model
+also happened to survive alongside it. An inconclusive trial is neither a
+missed diagnosis (the true model IS still among the survivors) nor a wrong
+one (no false model stands alone), so it does not belong in either failure
+column; the raw correct/inconclusive split is still available per-cell in
+the npz's `rows` array for anyone who wants it (see the investigation this
+merge came from: robotarium_diagnosis_mc.py's in-bound inconclusive cases
+all trace to specific configs where a SECOND candidate model's predicted
+interval happens to still contain the true trajectory too -- a genuine
+ambiguity in the reachable-set geometry for those configs, not a fault-
+diagnosis failure).
+
 Usage: python summarize_robotarium_diagnosis.py [in_npz] [--coarse]
 """
 import sys
@@ -43,14 +56,15 @@ def _agg(rows, keyfn, res_suffix=""):
 
 def _print_table(agg, title, key_labels):
     print(f"\n=== {title} ===")
-    header = f"{'':40s}{'n':>8}{'correct%':>10}{'inconcl%':>10}{'missed%':>10}{'wrong%':>10}"
+    header = f"{'':40s}{'n':>8}{'correct%':>10}{'missed%':>10}{'wrong%':>10}"
     print(header)
     for key in sorted(agg.keys()):
         row = agg[key]
         n = row["n_trials"]
         label = key_labels(key)
+        correct_pct = 100 * (row["correct"] + row["inconclusive"]) / n
         print(f"{label:40s}{n:8d}"
-              f"{100*row['correct']/n:10.1f}{100*row['inconclusive']/n:10.1f}"
+              f"{correct_pct:10.1f}"
               f"{100*row['missed']/n:10.1f}{100*row['wrong']/n:10.1f}")
 
 
