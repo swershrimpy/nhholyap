@@ -85,23 +85,48 @@ import immrax as irx
 import numpy as np
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Physical parameter defaults (standard literature quadrotor values -- NOT
-# fetched from the cited thesis; see PLAN.md "Decisions").
+# Physical parameter defaults -- REAL Crazyflie 2.x values (updated from the
+# original generic-literature-quadrotor defaults, m=0.468kg/I~1e-3, so this
+# module's separating controllers can be validated against QPS's real
+# rigid-body Crazyflie plant (crazyflie_12d.py's CrazyflieSystem, itself
+# verified bit-for-bit against QPS's own forward_model()) -- see that
+# module's docstring for the side-by-side parameter table this is sourced
+# from (quadcopter_model.py:39-41 in QPS). g unchanged (mass-independent).
 # ══════════════════════════════════════════════════════════════════════════════
-_M = 0.468       # mass, kg
+_M = 0.03589     # mass, kg  (35.89 g -- QPS quadcopter_model.py)
 _G = 9.81        # gravity, m/s^2
-_IXX = 4.856e-3  # roll-axis moment of inertia, kg*m^2
-_IYY = 4.856e-3  # pitch-axis moment of inertia, kg*m^2
-_IZZ = 8.801e-3  # yaw-axis moment of inertia, kg*m^2
+_IXX = 2.3951e-5  # roll-axis moment of inertia, kg*m^2  (QPS)
+_IYY = 2.3951e-5  # pitch-axis moment of inertia, kg*m^2  (QPS)
+_IZZ = 3.2346e-5  # yaw-axis moment of inertia, kg*m^2  (QPS)
 
-_HOVER_THRUST = _M * _G   # ~4.591 N
+_HOVER_THRUST = _M * _G   # ~0.352 N
 
 # Control input box: u1 (thrust) centered on hover thrust, u2/u3/u4 (moments)
 # a small symmetric range -- see PLAN.md Sec 3 for the reasoning (keeps
 # attitude-rate excursions modest over the short horizons used here, well
-# clear of the theta=+-90 deg gimbal-lock singularity).
-_U_LO = jnp.array([0.5 * _HOVER_THRUST, -0.02, -0.02, -0.02])
-_U_HI = jnp.array([1.5 * _HOVER_THRUST, 0.02, 0.02, 0.02])
+# clear of the theta=+-90 deg gimbal-lock singularity). The moment bound
+# itself was always "a tunable default, not a physical spec" (PLAN.md); it
+# is RE-DERIVED here, not just copied, to preserve that same design intent
+# under the real Crazyflie's ~200x smaller inertia -- the original 0.02 N*m
+# bound implied a modest ~4.1/2.3 rad/s^2 (roll-pitch/yaw) peak angular
+# acceleration against the OLD literature inertia; holding that SAME
+# angular-acceleration bound and re-multiplying by the real Crazyflie's
+# inertia gives the values below (an unchanged 0.02 N*m bound would instead
+# imply peak angular accelerations of ~800+ rad/s^2 against the real,
+# much smaller inertia -- wildly outside "modest," and would blow past the
+# gimbal-lock-avoidance assumption almost immediately).
+_U_LO = jnp.array([0.5 * _HOVER_THRUST, -9.8645e-5, -9.8645e-5, -7.3505e-5])
+_U_HI = jnp.array([1.5 * _HOVER_THRUST, 9.8645e-5, 9.8645e-5, 7.3505e-5])
+
+# Multi-start GD restart noise, per channel -- 10% of each channel's box
+# half-width, same convention as the thrust channel's existing
+# "0.1 * _HOVER_THRUST". MUST be re-derived alongside _U_LO/_U_HI, not left
+# at the old moment bound's hardcoded 0.005: that value is ~50-70x LARGER
+# than the entire new moment box (~2e-4 wide), so every restart's initial
+# moment component would land far outside the box and get clipped to the
+# same edge by _project_u, collapsing restart diversity to nothing instead
+# of spreading restarts across the feasible region.
+_U_NOISE_SCALE = jnp.array([0.1 * _HOVER_THRUST, 0.1 * 9.8645e-5, 0.1 * 9.8645e-5, 0.1 * 7.3505e-5])
 
 # Loops (Euler steps, GD iterations) with a static length <= this are fully
 # unrolled into straight-line code instead of lax.fori_loop/scan -- see
@@ -432,7 +457,7 @@ def optimize_parallel_gpu(opt: 'SeparatingInputOptimizer', num_restarts: int = 1
     """GPU-parallel multi-start gradient descent for a constant separating input."""
     key = jax.random.PRNGKey(seed)
     u_init = jnp.array([_HOVER_THRUST, 0.0, 0.0, 0.0])
-    noise_scale = jnp.array([0.1 * _HOVER_THRUST, 0.005, 0.005, 0.005])
+    noise_scale = _U_NOISE_SCALE
     u0 = jax.random.normal(key, (num_restarts, 4)) * noise_scale + u_init
 
     batched_loss = jax.vmap(opt.loss_fn)
