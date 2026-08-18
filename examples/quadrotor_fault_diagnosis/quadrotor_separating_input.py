@@ -145,12 +145,80 @@ def _project_u(u: jnp.ndarray) -> jnp.ndarray:
 
 def _overlap_volume(ivl1: irx.Interval, ivl2: irx.Interval) -> jnp.ndarray:
     """Branchless pairwise axis-aligned-box overlap volume. Ported verbatim
-    from nonlinear_chain_separating_input.py (fully generic over dimension)."""
+    from nonlinear_chain_separating_input.py (fully generic over dimension).
+
+    Caveat (see RESULTS.md "Important caveat found while building this
+    experiment"): this is a PRODUCT of 12 per-dimension overlap widths. For
+    a short-horizon, near-hover state box, every dimension's ABSOLUTE width
+    is small (~0.02-0.06 in this module's units) regardless of how much the
+    two boxes actually overlap RELATIVE to their own size -- so the product
+    can read as ~1e-19 (numerically indistinguishable from "separated") even
+    when every single dimension still overlaps 60-90%. Driving this loss to
+    ~0 via gradient descent is therefore not reliable evidence of true
+    disjointness, and its gradient vanishes in exactly the regime where
+    genuine separation still needs to be found (many small-but-nonzero
+    per-dimension widths whose product is already tiny). `_soft_separation_loss`
+    below is a proxy built to avoid both problems; kept alongside (not a
+    replacement) since existing callers/tests pin this exact function."""
     widths = jnp.maximum(
         jnp.minimum(ivl1.upper, ivl2.upper) - jnp.maximum(ivl1.lower, ivl2.lower),
         0.0,
     )
     return jnp.prod(widths)
+
+
+def _signed_separation_margin(ivl1: irx.Interval, ivl2: irx.Interval) -> jnp.ndarray:
+    """Per-dimension signed separation margin between two axis-aligned boxes.
+    margin[d] > 0 means the boxes are DISJOINT along dimension d by that
+    much; margin[d] < 0 means dimension d still overlaps by |margin[d]|.
+
+    This is the quantity that actually determines disjointness: two
+    axis-aligned boxes are disjoint iff AT LEAST ONE dimension is disjoint
+    (max_d margin[d] >= 0), regardless of how the other dimensions overlap.
+    `_overlap_volume` instead multiplies overlap widths across ALL 12
+    dimensions, so it can look near-zero without any single dimension ever
+    reaching genuine separation -- exactly the failure mode found when
+    checking solve_and_plot.py's boxes by hand (ActuatorFault_2/3/4 overlap
+    Nominal 60-88% per-dimension despite ~1e-19 volume)."""
+    return jnp.maximum(ivl2.lower - ivl1.upper, ivl1.lower - ivl2.upper)
+
+
+def _soft_separation_loss(ivl1: irx.Interval, ivl2: irx.Interval, tau: float = 0.01) -> jnp.ndarray:
+    """Smooth proxy for 'these two boxes are not yet disjoint', built from
+    the per-dimension margin instead of a volume product -- a drop-in
+    alternative to `_overlap_volume` wherever that function is used as a
+    per-pair separation cost (same signature, same "0 means separated"
+    convention), intended to alleviate the vanishing-gradient/false-early-
+    convergence problem documented on `_overlap_volume`.
+
+    True disjointness only needs max_d margin[d] >= 0. A hard max routes
+    gradient through a single dimension and gives exactly zero gradient to
+    every other dimension -- including near-competitive runners-up -- which
+    is its own vanishing-gradient trap early in optimization, before any
+    one dimension is close to separating. `tau` softens the hard max into a
+    logsumexp so every dimension with a competitive margin contributes
+    gradient, while still converging to max_d margin[d] as tau -> 0.
+
+    Bias correction (found empirically -- see git history/RESULTS.md "second
+    caveat"): plain `tau*logsumexp(margins/tau)` is an UPPER bound on the
+    true max, `max(margins) <= logsumexp*tau <= max(margins) + tau*log(D)`
+    for D dimensions. At D=12, tau=0.01 that slack is `tau*log(12)~=0.025` --
+    comparable to this module's actual margins (~0.02-0.03), so the
+    UNCORRECTED loss hit exactly 0 (falsely claiming separation) while the
+    true hard-max margin was still negative by about that much (confirmed:
+    an optimizer run using the uncorrected version converged to loss=0 at
+    every checked step while every pair was still genuinely overlapping by
+    ~0.018-0.026 in every dimension). Subtracting `tau*log(D)` makes this a
+    LOWER bound on the true max instead (`logsumexp*tau - tau*log(D) <=
+    max(margins)`), so loss=0 here is a SAFE (never falsely-optimistic)
+    certificate of true disjointness -- clipped at 0 once genuinely
+    separated, matching `_overlap_volume`'s own convention, so optimization
+    pressure stops there rather than pushing boxes further apart than
+    necessary."""
+    margins = _signed_separation_margin(ivl1, ivl2)
+    n_dims = margins.shape[-1]
+    soft_best_margin = tau * (jax.scipy.special.logsumexp(margins / tau) - jnp.log(n_dims))
+    return jnp.maximum(-soft_best_margin, 0.0)
 
 
 def _run_unrolled_or_loop(step_fn, init, n: int, unroll_threshold: int = _UNROLL_THRESHOLD):
@@ -527,8 +595,19 @@ def propagate_scenario_multistep(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
 
 def separation_loss_multistep(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
                               scenarios: List[Scenario], dt: float,
-                              steps_per_segment: int) -> jnp.ndarray:
+                              steps_per_segment: int,
+                              margin_tau: Optional[float] = None) -> jnp.ndarray:
     """Min over segments of the pairwise state-interval overlap sum.
+
+    `margin_tau`: if None (default), the pairwise cost is the volume-product
+    metric (`_overlap_volume`'s formula, inlined/vectorized below) --
+    preserves prior behavior/tests exactly. If set to a float, uses the
+    vectorized form of `_soft_separation_loss` (temperature `margin_tau`)
+    instead: targets max-over-dimensions signed margin rather than a
+    12-dimensional product, which is the metric that actually determines
+    box disjointness and doesn't vanish just because the boxes are small in
+    absolute terms -- see `_soft_separation_loss`'s docstring for why this
+    matters at this module's short, near-hover horizons.
 
     Compile-cost note: the pairwise-overlap-at-every-segment computation is
     fully vectorized (gather over precomputed pair indices + jax.vmap over
@@ -564,8 +643,20 @@ def separation_loss_multistep(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
         # (shape (n_pairs, 12)) instead of a Python loop over pairs.
         lower_i, upper_i = x_hist_batch.lower[i_idx, k], x_hist_batch.upper[i_idx, k]
         lower_j, upper_j = x_hist_batch.lower[j_idx, k], x_hist_batch.upper[j_idx, k]
-        widths = jnp.maximum(jnp.minimum(upper_i, upper_j) - jnp.maximum(lower_i, lower_j), 0.0)
-        return jnp.sum(jnp.prod(widths, axis=-1))
+        if margin_tau is None:
+            widths = jnp.maximum(jnp.minimum(upper_i, upper_j) - jnp.maximum(lower_i, lower_j), 0.0)
+            return jnp.sum(jnp.prod(widths, axis=-1))
+        else:
+            # log(n_dims) bias correction -- see _soft_separation_loss's
+            # docstring "Bias correction": uncorrected logsumexp is an
+            # upper bound on the true max, by up to margin_tau*log(12),
+            # which is large enough at this module's margin scale to make
+            # the loss falsely hit 0 before any dimension is truly disjoint.
+            margins = jnp.maximum(lower_j - upper_i, lower_i - upper_j)   # (n_pairs, 12)
+            n_dims = margins.shape[-1]
+            soft_best_margin = margin_tau * (jax.scipy.special.logsumexp(
+                margins / margin_tau, axis=-1) - jnp.log(n_dims))   # (n_pairs,)
+            return jnp.sum(jnp.maximum(-soft_best_margin, 0.0))
 
     # vmap over segments instead of a Python loop over range(num_segments).
     segment_overlaps = jax.vmap(overlap_at_k)(jnp.arange(num_segments))
@@ -576,7 +667,8 @@ class MultistepSequenceOptimizer:
     """Container for multistep loss/grad callables and sequence shape."""
 
     def __init__(self, scenarios: List[Scenario], x0_ivl: irx.Interval,
-                 dt: float, steps_per_segment: int, num_segments: int):
+                 dt: float, steps_per_segment: int, num_segments: int,
+                 margin_tau: Optional[float] = None):
         self.scenarios = scenarios
         self.x0_ivl = x0_ivl
         self.dt = dt
@@ -584,17 +676,35 @@ class MultistepSequenceOptimizer:
         self.num_segments = num_segments
 
         _loss = partial(separation_loss_multistep, x0_ivl=x0_ivl, scenarios=scenarios,
-                        dt=dt, steps_per_segment=steps_per_segment)
+                        dt=dt, steps_per_segment=steps_per_segment, margin_tau=margin_tau)
         self.loss_fn = jax.jit(_loss)
         self.grad_fn = jax.jit(jax.grad(_loss))
 
 
 def optimize_multistep_gpu(opt: 'MultistepSequenceOptimizer', num_restarts: int = 100,
-                           learning_rate: float = 0.01, num_iters: int = 150, seed: int = 42):
-    """GPU-parallel multi-start optimization for control sequences."""
+                           learning_rate: float = 0.01, num_iters: int = 150, seed: int = 42,
+                           normalize_grad: bool = False):
+    """GPU-parallel multi-start optimization for control sequences.
+
+    `normalize_grad`: if True, each GD step moves `learning_rate` in the
+    NORMALIZED gradient direction (`g / ||g||`) instead of `learning_rate *
+    g`. Needed at longer horizons (large `opt.num_segments`) with
+    `margin_tau` set: gradient norm through `separation_loss_multistep`'s
+    unrolled Euler propagation compounds across segments (a standard
+    RNN-like effect), reaching O(1e3) at num_segments=20 in this module's
+    dynamics, while the control box itself is only O(1e-4) wide in the
+    moment channels -- an unnormalized step at any learning_rate that isn't
+    absurdly small either overshoots the box every iteration (clipped back
+    to the same boundary point, permanently stuck -- confirmed: this is
+    exactly what happened when this feature was added, `learning_rate` in
+    [3e-6, 0.02] with the plain update all converged to the SAME stuck
+    non-zero loss after a handful of iterations) or moves imperceptibly
+    slowly. Normalizing decouples step SIZE from the gradient's (highly
+    horizon- and iterate-dependent) magnitude; `learning_rate` in this mode
+    should be set near the control box's own width, not a generic GD rate."""
     key = jax.random.PRNGKey(seed)
     u_init = jnp.array([_HOVER_THRUST, 0.0, 0.0, 0.0])
-    noise_scale = jnp.array([0.1 * _HOVER_THRUST, 0.005, 0.005, 0.005])
+    noise_scale = _U_NOISE_SCALE
     u0 = jax.random.normal(key, (num_restarts, opt.num_segments, 4)) * noise_scale + u_init
 
     batched_loss = jax.vmap(opt.loss_fn)
@@ -602,6 +712,9 @@ def optimize_multistep_gpu(opt: 'MultistepSequenceOptimizer', num_restarts: int 
 
     def body(u_batch, _i):
         g = batched_grad(u_batch)
+        if normalize_grad:
+            flat = g.reshape(g.shape[0], -1)
+            g = g / (jnp.linalg.norm(flat, axis=-1).reshape(-1, 1, 1) + 1e-12)
         return _project_u(u_batch - learning_rate * g)
 
     u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
@@ -613,11 +726,15 @@ def optimize_multistep_gpu(opt: 'MultistepSequenceOptimizer', num_restarts: int 
 def optimize_multistep_gpu_rejit(x0_ivl: irx.Interval, scenarios: List[Scenario],
                                  dt: float, steps_per_segment: int, num_segments: int,
                                  num_restarts: int = 100, learning_rate: float = 0.01,
-                                 num_iters: int = 150, seed: int = 42):
+                                 num_iters: int = 150, seed: int = 42,
+                                 margin_tau: Optional[float] = None,
+                                 normalize_grad: bool = False):
     return optimize_multistep_gpu(
         MultistepSequenceOptimizer(scenarios=scenarios, x0_ivl=x0_ivl, dt=dt,
-                                   steps_per_segment=steps_per_segment, num_segments=num_segments),
+                                   steps_per_segment=steps_per_segment, num_segments=num_segments,
+                                   margin_tau=margin_tau),
         num_restarts=num_restarts, learning_rate=learning_rate, num_iters=num_iters, seed=seed,
+        normalize_grad=normalize_grad,
     )
 
 
@@ -678,8 +795,18 @@ def optimize_multistep(scenarios: List[Scenario], x0_ivl: irx.Interval, dt: floa
 
 def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
                               scenarios: List[Scenario], dt: float,
-                              num_steps: int = 2) -> jnp.ndarray:
+                              num_steps: int = 2,
+                              pair_cost_fn=_overlap_volume) -> jnp.ndarray:
     """Multi-step propagation with per-pair state-interval refinement.
+
+    `pair_cost_fn(ivl1, ivl2) -> scalar` computes the per-pair separation
+    cost at each step (default `_overlap_volume`, preserving prior
+    behavior/tests exactly). Pass `_soft_separation_loss` to optimize the
+    margin-based proxy instead -- see that function's docstring for why:
+    `_overlap_volume`'s product-of-widths can read as ~0 (and its gradient
+    vanish) while every dimension still substantially overlaps, once the
+    boxes themselves are small in absolute terms (as they are at this
+    module's short, near-hover horizons).
 
     No sensor fault in this module -> the observation map is the identity,
     so refining a scenario pair's estimate from their intersection collapses
@@ -738,7 +865,7 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     step1_cost = jnp.array(0.0)
     for i in range(n):
         for j in range(i + 1, n):
-            step1_cost = step1_cost + _overlap_volume(x1_ivls[i], x1_ivls[j])
+            step1_cost = step1_cost + pair_cost_fn(x1_ivls[i], x1_ivls[j])
 
     pxi_arr = jnp.stack([ivl_to_arr(x1_ivls[i]) for i, j in pairs])
     pxj_arr = jnp.stack([ivl_to_arr(x1_ivls[j]) for i, j in pairs])
@@ -766,7 +893,7 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
         x_next_i = euler_step(emb_sys, x_ref_i, u_k, p_i, dt)
         x_next_j = euler_step(emb_sys, x_ref_j, u_k, p_j, dt)
 
-        raw_cost = _overlap_volume(x_next_i, x_next_j)
+        raw_cost = pair_cost_fn(x_next_i, x_next_j)
         pair_cost = jnp.where(has_overlap, raw_cost, jnp.array(0.0))
         return ivl_to_arr(x_next_i), ivl_to_arr(x_next_j), pair_cost
 
@@ -786,23 +913,32 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
 
 def refined_overlap_loss(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
                          scenarios: List[Scenario], dt: float,
-                         num_steps: int = 2) -> jnp.ndarray:
-    """Separation loss using multi-step propagation with state refinement."""
-    return propagate_with_refinement(x0_ivl, u_seq, scenarios, dt, num_steps)
+                         num_steps: int = 2,
+                         pair_cost_fn=_overlap_volume) -> jnp.ndarray:
+    """Separation loss using multi-step propagation with state refinement.
+    See `propagate_with_refinement`'s docstring for `pair_cost_fn`."""
+    return propagate_with_refinement(x0_ivl, u_seq, scenarios, dt, num_steps, pair_cost_fn)
 
 
 def optimize_refined_gpu(x0_ivl: irx.Interval, scenarios: List[Scenario], dt: float,
                          num_steps: int = 2, num_restarts: int = 50,
                          learning_rate: float = 0.05, num_iters: int = 200,
-                         seed: int = 42) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """GPU-parallel multi-start gradient descent minimising refined_overlap_loss."""
+                         seed: int = 42,
+                         pair_cost_fn=_overlap_volume) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """GPU-parallel multi-start gradient descent minimising refined_overlap_loss.
+
+    `pair_cost_fn` defaults to `_overlap_volume` (unchanged prior behavior).
+    Pass `_soft_separation_loss` to optimize the margin-based proxy instead
+    -- see that function's docstring for why this matters at this module's
+    short, near-hover horizons (the volume product can look ~0, and its
+    gradient vanish, well before any dimension is genuinely disjoint)."""
     key = jax.random.PRNGKey(seed)
     u_init = jnp.array([_HOVER_THRUST, 0.0, 0.0, 0.0])
-    noise_scale = jnp.array([0.1 * _HOVER_THRUST, 0.005, 0.005, 0.005])
+    noise_scale = _U_NOISE_SCALE
     u0 = jax.random.normal(key, (num_restarts, num_steps, 4)) * noise_scale + u_init
 
     def loss_fn_refined(u_seq):
-        return refined_overlap_loss(u_seq, x0_ivl, scenarios, dt, num_steps)
+        return refined_overlap_loss(u_seq, x0_ivl, scenarios, dt, num_steps, pair_cost_fn)
 
     batched_loss = jax.vmap(loss_fn_refined)
     batched_grad = jax.vmap(jax.grad(loss_fn_refined))
