@@ -71,10 +71,22 @@ class TestQuadrotorSystemDynamics:
         """At x=0 (level attitude, zero velocity/rates) with u = [mg,0,0,0]
         and alpha nominal, every one of the 12 derivatives must be exactly
         0 -- thrust exactly cancels gravity and every trig/coupling term
-        vanishes. See PLAN.md Sec 1."""
+        vanishes. See PLAN.md Sec 1.
+
+        atol=1e-5, not the original 1e-10: verified (via a float64 rerun of
+        this exact call, jax_enable_x64=True, giving exactly 0.0 in every
+        component) that the ~9.5e-7 residual now observed in float32 is a
+        rounding artifact of the real Crazyflie's much smaller mass scale
+        (_M=0.03589kg vs. the original generic-quadrotor default
+        _M=0.468kg), not a physics or dynamics-implementation bug -- the
+        SAME `U1/self.m - g` cancellation that landed exactly at machine
+        epsilon for the old, larger mass leaves a small nonzero float32
+        residual at this mass instead. 1e-5 is comfortably above the
+        observed residual while still catching a genuine mismatch (e.g. a
+        sign error) many orders of magnitude larger than rounding noise."""
         sys_ = QuadrotorSystem()
         dx = sys_.f(jnp.zeros(()), jnp.zeros(12), _HOVER_U, jnp.ones(4))
-        np.testing.assert_allclose(np.array(dx), np.zeros(12), atol=1e-10)
+        np.testing.assert_allclose(np.array(dx), np.zeros(12), atol=1e-5)
 
     def test_derivative_at_origin_matches_hand_computation(self):
         """At x=0, every kinematic/Coriolis term vanishes (all velocities

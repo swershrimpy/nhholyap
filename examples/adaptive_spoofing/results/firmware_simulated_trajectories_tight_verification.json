@@ -1,0 +1,103 @@
+{
+  "regime": "TIGHT regime (zero bias)",
+  "u_seq": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "final_positions": {
+    "cf_pid": [
+      0.0,
+      0.0,
+      0.0030514396181444154
+    ],
+    "cf_mellinger": [
+      0.0,
+      0.0,
+      0.005499579192492861
+    ],
+    "cf_indi": [
+      0.0,
+      0.0,
+      0.000597952601
+    ],
+    "cf_brescianini": [
+      0.0,
+      0.0,
+      0.0013280571525134054
+    ]
+  },
+  "pairwise_final_separation_m": {
+    "cf_pid vs cf_mellinger": 0.0024481395743484458,
+    "cf_pid vs cf_indi": 0.0024534870171444155,
+    "cf_pid vs cf_brescianini": 0.00172338246563101,
+    "cf_mellinger vs cf_indi": 0.004901626591492861,
+    "cf_mellinger vs cf_brescianini": 0.004171522039979456,
+    "cf_indi vs cf_brescianini": 0.0007301045515134054
+  },
+  "min_separation_m": 0.0007301045515134054,
+  "discrimination_verdicts": {
+    "cf_pid": {
+      "survivors": [
+        "cf_pid"
+      ],
+      "fail_step": {
+        "cf_pid": -1,
+        "cf_mellinger": 0,
+        "cf_indi": 0,
+        "cf_brescianini": 0
+      },
+      "correct": true
+    },
+    "cf_mellinger": {
+      "survivors": [
+        "cf_mellinger"
+      ],
+      "fail_step": {
+        "cf_pid": 0,
+        "cf_mellinger": -1,
+        "cf_indi": 0,
+        "cf_brescianini": 0
+      },
+      "correct": true
+    },
+    "cf_indi": {
+      "survivors": [
+        "cf_indi"
+      ],
+      "fail_step": {
+        "cf_pid": 0,
+        "cf_mellinger": 0,
+        "cf_indi": -1,
+        "cf_brescianini": 0
+      },
+      "correct": true
+    },
+    "cf_brescianini": {
+      "survivors": [
+        "cf_brescianini"
+      ],
+      "fail_step": {
+        "cf_pid": 0,
+        "cf_mellinger": 0,
+        "cf_indi": 0,
+        "cf_brescianini": -1
+      },
+      "correct": true
+    }
+  },
+  "all_correct": true,
+  "note": "Point-simulation verification (real controller equations, no CrazySim/Gazebo/firmware-binary layer -- see module docstring)."
+}

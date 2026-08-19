@@ -43,6 +43,7 @@ if str(_EXAMPLES_DIR) not in sys.path:
 from adaptive_spoofing.crazyflie_firmware_controllers import (
     create_scenarios, CANDIDATE_NAMES, QPS_DT,
     simulate_true_trajectory, discriminate_controller,
+    propagate_history,
 )
 import immrax as irx
 
@@ -53,34 +54,59 @@ CANDIDATE_COLORS = {
     "cf_indi": "tab:green", "cf_brescianini": "tab:red",
 }
 
-OBSERVABLE_WIDTH = jnp.concatenate([
+# WIDE regime: realistic per-axis-scaled uncertainty (position/velocity ~5cm(/s),
+# attitude ~1deg, rates ~0.05rad/s, memory generously loose) -- see
+# run_firmware_discrimination.py's WIDE_WIDTH, same values.
+WIDE_WIDTH = jnp.concatenate([
     jnp.full(3, 0.05), jnp.full(3, 0.05), jnp.full(3, 0.017), jnp.full(3, 0.05), jnp.full(9, 0.01),
 ])
+# TIGHT regime: a well-converged state estimate -- see run_firmware_discrimination.py's
+# TIGHT_WIDTH, same value. Under this uncertainty the 4 controllers separate
+# instantly (loss_at_zero_bias=0.0 in results/firmware_discrimination_result.json's
+# tight_regime), so no synthesized bias is needed -- plotted with zero bias.
+TIGHT_WIDTH = 1e-3
+# Must match run_firmware_discrimination.py's NUM_STEPS -- both regimes there
+# use the same horizon.
+NUM_STEPS = 3
 W_BAR = 1e-3
 
 
-def main():
-    with open(RESULTS_DIR / "firmware_discrimination_result.json") as f:
-        result = json.load(f)
-    u_seq = jnp.array(result["wide_regime"]["u_star"])
+def _simulate_and_plot(regime_name, x0_ivl, u_seq, scenarios, out_stem, title_suffix, json_stem=None):
+    """Simulate all 4 controllers' closed-loop response under `u_seq` from
+    prior `x0_ivl`, overlay each controller's own output-reachable tube,
+    save the plot, re-confirm discrimination, and save the verification
+    JSON. Shared by both the WIDE (optimized-bias) and TIGHT (zero-bias)
+    regimes so they can't independently drift out of sync."""
     num_steps = u_seq.shape[0]
-    print(f"Loaded synthesized spoof bias: shape={u_seq.shape}, "
-         f"max|bias|={float(jnp.max(jnp.abs(u_seq))):.4f} m")
-
-    scenarios = create_scenarios()
     x0_point = jnp.zeros(21)
-    x0_ivl = irx.icentpert(jnp.zeros(21), OBSERVABLE_WIDTH)
+    print(f"\n{'=' * 70}\n{regime_name}: max|bias|={float(jnp.max(jnp.abs(u_seq))):.4f} m, "
+         f"num_steps={num_steps}")
 
-    # ── Simulate all 4 controllers' ACTUAL closed-loop response ──
-    trajectories = {}
+    # ── Simulate all 4 controllers' ACTUAL closed-loop response, and (for the
+    # SAME scenario) the output-reachable tube each controller model predicts
+    # from the shared x0_ivl prior under the same bias sequence -- both
+    # prepended with the shared t=0 state/box so the line and its tube start
+    # at the same point. ──
+    trajectories = {}        # (T, 12) -- used as-is by discriminate_controller below
+    trajectories_full = {}   # (T+1, 12), t=0 state prepended -- used for plotting only
+    tube_lower = {}
+    tube_upper = {}
     for name in CANDIDATE_NAMES:
         scen = [s for s in scenarios if s.name == name][0]
         traj = simulate_true_trajectory(x0_point, u_seq, scen)   # (T, 12)
         trajectories[name] = np.array(traj)
+        trajectories_full[name] = np.concatenate(
+            [np.array(x0_point[:12])[None, :], np.array(traj)], axis=0)  # (T+1, 12)
         print(f"{name:16s} final position: {traj[-1, 0:3]}  final attitude: {traj[-1, 6:9]}")
 
+        # NOTE: observed_output() assumes a single (21,) state interval, not a
+        # (T+1, 21) batch -- slice the observable dims directly here instead.
+        hist = propagate_history(x0_ivl, u_seq, scen)             # (T+1, 21) interval
+        tube_lower[name] = np.array(hist.lower)[:, :12]
+        tube_upper[name] = np.array(hist.upper)[:, :12]
+
     # ── Confirm the 4 simulated trajectories are actually distinguishable ──
-    t = np.arange(1, num_steps + 1) * QPS_DT
+    t = np.arange(0, num_steps + 1) * QPS_DT   # includes t=0 (shared prior), matches traj_full/tube length T+1
     final_positions = np.stack([trajectories[n][-1, 0:3] for n in CANDIDATE_NAMES])
     pairwise_final_dist = {}
     for i, ni in enumerate(CANDIDATE_NAMES):
@@ -93,24 +119,36 @@ def main():
         print(f"  {k}: {v*1000:.3f} mm")
     min_sep = min(pairwise_final_dist.values())
 
-    # ── Plot: position + attitude trajectories, all 4 controllers overlaid ──
+    # ── Plot: position + attitude trajectories, all 4 controllers overlaid,
+    # each with its own output-reachable tube (the interval of observed
+    # states consistent with that controller model from the shared x0_ivl
+    # prior, propagated under the same bias sequence via propagate_history)
+    # shaded behind it in matching color. Every candidate's simulated line
+    # stays inside its own tube by construction -- what the plot shows is how
+    # much the four tubes stop overlapping each other as the spoof bias
+    # drives them apart. ──
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
     labels = [("x position (m)", 0), ("y position (m)", 1), ("z position (m)", 2),
              ("roll (rad)", 6), ("pitch (rad)", 7), ("yaw (rad)", 8)]
     for ax, (label, dim) in zip(axes.flat, labels):
         for name in CANDIDATE_NAMES:
-            ax.plot(t, trajectories[name][:, dim], color=CANDIDATE_COLORS[name],
+            color = CANDIDATE_COLORS[name]
+            ax.fill_between(t, tube_lower[name][:, dim], tube_upper[name][:, dim],
+                            color=color, alpha=0.18, linewidth=0)
+            ax.plot(t, trajectories_full[name][:, dim], color=color,
                    label=name, linewidth=1.8)
         ax.set_ylabel(label)
         ax.grid(alpha=0.3)
     axes[0, 0].legend(fontsize=8)
     for ax in axes[-1, :]:
         ax.set_xlabel("time (s)")
-    fig.suptitle("Simulated closed-loop response of all 4 real firmware controllers\n"
-                "under the SAME synthesized spoof-bias sequence", fontsize=13)
+    fig.suptitle(f"Simulated closed-loop response of all 4 real firmware controllers\n{title_suffix}",
+                fontsize=13)
     fig.tight_layout()
-    fig.savefig(RESULTS_DIR / "firmware_simulated_trajectories.png", dpi=150)
-    print(f"\nSaved {RESULTS_DIR / 'firmware_simulated_trajectories.png'}")
+    out_png = RESULTS_DIR / f"{out_stem}.png"
+    fig.savefig(out_png, dpi=150)
+    plt.close(fig)
+    print(f"\nSaved {out_png}")
 
     # ── Re-confirm discrimination against each simulated trajectory ──
     print("\nDiscrimination verdict, reacting to each simulated trajectory in turn:")
@@ -131,8 +169,10 @@ def main():
     print("VERDICT:", "PASS -- trajectory is suitable for discrimination" if all_ok and min_sep > 1e-6
          else "CHECK -- see per-controller verdicts above")
 
-    with open(RESULTS_DIR / "firmware_simulation_verification.json", "w") as f:
+    out_json = RESULTS_DIR / f"{json_stem or out_stem}_verification.json"
+    with open(out_json, "w") as f:
         json.dump({
+            "regime": regime_name,
             "u_seq": np.array(u_seq).tolist(),
             "final_positions": {n: trajectories[n][-1, 0:3].tolist() for n in CANDIDATE_NAMES},
             "pairwise_final_separation_m": pairwise_final_dist,
@@ -141,7 +181,38 @@ def main():
             "all_correct": all_ok,
             "note": "Point-simulation verification (real controller equations, no CrazySim/Gazebo/firmware-binary layer -- see module docstring).",
         }, f, indent=2)
-    print(f"Saved {RESULTS_DIR / 'firmware_simulation_verification.json'}")
+    print(f"Saved {out_json}")
+
+
+def main():
+    scenarios = create_scenarios()
+
+    # ── WIDE regime: realistic per-axis uncertainty, optimized spoof bias
+    # (loaded from run_firmware_discrimination.py's synthesis output) ──
+    with open(RESULTS_DIR / "firmware_discrimination_result.json") as f:
+        result = json.load(f)
+    u_star = jnp.array(result["wide_regime"]["u_star"])
+    x0_wide = irx.icentpert(jnp.zeros(21), WIDE_WIDTH)
+    _simulate_and_plot(
+        "WIDE regime (optimized spoof bias)", x0_wide, u_star, scenarios,
+        out_stem="firmware_simulated_trajectories",
+        json_stem="firmware_simulation",   # preserves the pre-existing results/firmware_simulation_verification.json name (referenced by PLAN.md)
+        title_suffix="under the SAME synthesized spoof-bias sequence (WIDE, realistic per-axis "
+                     "uncertainty), with each controller's output-reachable tube overlaid",
+    )
+
+    # ── TIGHT regime: well-converged state estimate, ZERO bias -- separation
+    # is already loss=0.0 at zero bias here (results/firmware_discrimination_result.json's
+    # tight_regime), so no synthesized input is needed; plotted to show that
+    # visually. ──
+    x0_tight = irx.icentpert(jnp.zeros(21), jnp.full(21, TIGHT_WIDTH))
+    u_zero = jnp.zeros((NUM_STEPS, 3))
+    _simulate_and_plot(
+        "TIGHT regime (zero bias)", x0_tight, u_zero, scenarios,
+        out_stem="firmware_simulated_trajectories_tight",
+        title_suffix="under ZERO spoof bias (TIGHT, well-converged-estimate uncertainty), "
+                     "with each controller's output-reachable tube overlaid",
+    )
 
 
 if __name__ == "__main__":

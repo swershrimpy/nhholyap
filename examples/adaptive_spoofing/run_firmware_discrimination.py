@@ -128,7 +128,11 @@ def main():
 
     t0 = time.perf_counter()
     u_star, loss_star, u_all, losses_all = optimize_parallel_gpu(
-        opt_wide, num_restarts=32, learning_rate=0.03, num_iters=200, seed=0,
+        # seed bumped from the original 0 -> 1: the script is otherwise fully
+        # deterministic, so re-running unchanged would just reproduce the
+        # already-saved firmware_discrimination_result.json bit-for-bit, not
+        # generate a genuinely new separating controller.
+        opt_wide, num_restarts=32, learning_rate=0.03, num_iters=200, seed=1,
     )
     elapsed = time.perf_counter() - t0
     print(f"Optimized in {elapsed:.1f}s. Best loss={float(loss_star):.3e} "

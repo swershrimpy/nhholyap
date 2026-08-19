@@ -94,7 +94,39 @@ def _obs_interval_raw(
 # 1.  Controller parameterisation
 # ══════════════════════════════════════════════════════════════════════════════
 
-_K_MAX = 5.0
+_K_MAX = 2.0
+# History this session, all at 5s horizon (dt=0.5, num_steps=10):
+#   5.0  @ 100 restarts/6 iters : loss=0.0 but box blew up 20x (0.3m->6.1m) --
+#        refined-loss=0 was real (see below) but the RAW boxes overlapped
+#        1.5-2.0 m^2, i.e. genuinely too wide to be a useful/checkable
+#        certificate in practice, and the CBF margin nearly hit 0.
+#   1.0  @ 100/6  : box 4x growth, loss=0.0011, K saturated at bound on 2/4 entries.
+#   1.5  @ 100/6  : box 1.5x growth, loss=0.00081, all 3 pairs raw-separated
+#        to ~0.0008 m^2, K[0,0] saturated at -1.5.
+#   2.0  @ 300/10 : box 1.28x growth (flattest yet), loss=0.00013, all 3 pairs
+#        raw-separated to a few 1e-3 m^2, K[1,0] saturated at -2.0, but
+#        runtime rose to ~76ms (300 restarts/10 iters vs the ~40ms budget's
+#        100/6).
+#   5.0  @ 500/15 (retried with much more search): loss=0.0 again, but box
+#        STILL blew up 16.5x (0.3m->4.93m) and raw overlaps were 0.28-1.70
+#        m^2 -- confirms this is a STRUCTURAL problem with allowing K this
+#        large under the coarse (no-substep) Euler integration, not a
+#        search-budget problem; more restarts/iters does not fix it.
+#   3.0  @ 1000/15 : SAME blow-up signature as 5.0 (box 0.3m->2.98m, 10x;
+#        raw overlap up to 6.65 m^2; r saturated at both bounds [-1,1] both
+#        times K_MAX>=3.0 was tried). Confirms 2.0 is the genuine/blow-up
+#        threshold, not noise -- settling on K_MAX=2.0, now pushing restarts
+#        higher to try to close the last ~0.00013 gap to exact 0.
+# back in. Found (this session) that with init_std=1.0 and a large learning
+# rate, GD can drive K entries up to ~2.4 in magnitude -- combined with the
+# coarse single-Euler-step-per-segment integration (no sub-stepping) used by
+# separation_cbf_loss_refined_vmapped, this compounds into severe wrapping-
+# effect box growth (observed: 0.3m -> 6.1m over a 10-step/5s horizon).
+# Tightening the bound keeps K in a range where the natural embedding's
+# per-step amplification stays modest enough not to blow up the reachable
+# boxes into physical meaninglessness, while (empirically, see this
+# session's re-test) still being wide enough for GD to find genuine
+# (refined-loss=0) diagnosability solutions.
 # theta = [K00, K01, K10, K11,  r0, r1]   (6-D)
 _THETA_LO = jnp.concatenate([jnp.full(4, -_K_MAX), _U_LO])
 _THETA_HI = jnp.concatenate([jnp.full(4,  _K_MAX), _U_HI])
@@ -208,6 +240,86 @@ _NOM_ACT_CL_EMB = irx.natemb(_NOM_ACT_CL_SYS)
 
 _SF_CL_SYS = CarSensorFaultCLSystem()
 _SF_CL_EMB = irx.natemb(_SF_CL_SYS)
+
+
+class CarUnifiedCLSystem(irx.System):
+    """Unified CL system for all fault scenarios (theta=[K.flat,r], 6-D 'u').
+
+    Mirrors CarUnifiedTrackCLSystem (below) but for the plain (non-tracking)
+    output-feedback controller used by separation_cbf_loss_refined -- encodes
+    the observation model (scale, offset) in p so ALL scenarios share ONE
+    embedding, enabling a single jax.vmap over scenarios/pairs instead of a
+    Python for-loop that separately traces+differentiates one call site per
+    scenario/pair. See separation_cbf_loss_refined_vmapped's docstring for
+    why that matters: an un-vmapped Python loop over N structurally-identical
+    calls fed DIFFERENT runtime p_interval bounds cannot be merged by XLA's
+    CSE (CSE only merges calls with identical inputs), so it costs roughly N
+    times the compile work of one vmapped call.
+
+    p = [alpha, obs_scale, obs_off_x, obs_off_y]  (4-D)
+      Nominal        : p = [1.0,       1.0,  0.0, 0.0]
+      Actuator Fault : p in [alpha_lo, 1.0,  0.0, 0.0] x [alpha_hi, 1.0, 0.0, 0.0]
+      Sensor Fault   : p = [1.0,       0.95, 0.2, 0.2]
+    """
+
+    def __init__(self):
+        self.evolution = 'continuous'
+        self.xlen = 3
+
+    def f(self, t, x, u, p):
+        K = u[:4].reshape(2, 2)
+        r_ff = u[4:6]
+        alpha = p[0]
+        obs_scale = p[1]
+        obs_off = jnp.array([p[2], p[3]])
+        y = obs_scale * x[0:2] + obs_off
+        ctrl = jnp.clip(K @ y + r_ff, _U_LO, _U_HI)
+        v, omega = ctrl[0], ctrl[1]
+        phi = x[2]
+        return jnp.array([v * jnp.cos(phi), v * jnp.sin(phi), alpha * omega])
+
+
+_UNIFIED_CL_SYS = CarUnifiedCLSystem()
+_UNIFIED_CL_EMB = irx.natemb(_UNIFIED_CL_SYS)
+
+
+def create_unified_cl_scenarios(
+    actuator_alpha_lo: float = 0.0,
+    actuator_alpha_hi: float = 0.5,
+) -> List[Scenario]:
+    """Three closed-loop fault scenarios sharing ONE embedding (_UNIFIED_CL_EMB)
+    -- see CarUnifiedCLSystem's docstring. Used by
+    separation_cbf_loss_refined_vmapped / optimize_output_feedback_cbf_vmapped_gpu."""
+    return [
+        Scenario(
+            name="Nominal",
+            emb_system=_UNIFIED_CL_EMB,
+            p_interval=irx.icentpert(jnp.array([1.0, 1.0, 0.0, 0.0]), jnp.zeros(4)),
+            obs_offset=jnp.zeros(2),
+            obs_scale=jnp.ones(1),
+        ),
+        Scenario(
+            name="Actuator Fault",
+            emb_system=_UNIFIED_CL_EMB,
+            p_interval=irx.Interval(
+                lower=jnp.array([actuator_alpha_lo, 1.0, 0.0, 0.0]),
+                upper=jnp.array([actuator_alpha_hi, 1.0, 0.0, 0.0]),
+            ),
+            obs_offset=jnp.zeros(2),
+            obs_scale=jnp.ones(1),
+        ),
+        Scenario(
+            name="Sensor Fault",
+            emb_system=_UNIFIED_CL_EMB,
+            p_interval=irx.icentpert(
+                jnp.array([1.0, _OBS_SCALE_SENSOR[0],
+                            _OBS_OFFSET_SENSOR[0], _OBS_OFFSET_SENSOR[1]]),
+                jnp.zeros(4),
+            ),
+            obs_offset=_OBS_OFFSET_SENSOR,
+            obs_scale=_OBS_SCALE_SENSOR,
+        ),
+    ]
 
 
 # ── Tracking CL systems  (u = [K.flat, y_hat, u_ol], 8-D) ────────────────────
@@ -789,6 +901,227 @@ def optimize_output_feedback_cbf(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 6b.  Vectorized (vmapped) refined loss -- runtime optimization
+# ══════════════════════════════════════════════════════════════════════════════
+
+def separation_cbf_loss_refined_vmapped(
+    theta: jnp.ndarray,
+    x0_ivl: irx.Interval,
+    cl_scenarios: List[Scenario],
+    dt: float,
+    num_steps: int,
+    obstacles: jnp.ndarray,  # (N, 3) — each row [cx, cy, r_obs]
+    cbf_weight: float = 1.0,
+) -> jnp.ndarray:
+    """Numerically equivalent to separation_cbf_loss_refined, but replaces
+    every Python for-loop over scenarios/pairs (which separately traces and
+    reverse-mode-differentiates one call to cl_euler_step per scenario/pair
+    -- N un-vmapped calls cost roughly N times the compile work of one
+    vmapped call, since XLA's CSE cannot merge calls fed different runtime
+    p_interval bounds) with a SINGLE jax.vmap'd cl_euler_step call per
+    propagation site:
+      - Step 1 and each fori_loop iteration's "unrefined" propagation:
+        one vmap over the n scenarios (requires cl_scenarios to share ONE
+        embedding -- see create_unified_cl_scenarios / CarUnifiedCLSystem).
+      - Each iteration's refined pair propagation: one vmap over the
+        concatenated (2*n_pairs,) batch of both pair sides (xi_ref and
+        xj_ref stacked), instead of 2*n_pairs separate calls.
+    Pairwise overlap (overlap_size_lax, which internally uses lax.cond) is
+    likewise vmapped over the n_pairs axis rather than Python-looped -- JAX
+    auto-batches lax.cond under vmap.
+
+    Requires cl_scenarios[*].emb_system to all be the SAME object (checked
+    below) -- pass create_unified_cl_scenarios(...)'s output, not
+    create_cl_scenarios(...)'s.
+    """
+    n = len(cl_scenarios)
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    n_pairs = len(pairs)
+    xlen = x0_ivl.lower.shape[0]
+    emb_sys = cl_scenarios[0].emb_system
+    if any(s.emb_system is not emb_sys for s in cl_scenarios):
+        raise ValueError(
+            "separation_cbf_loss_refined_vmapped requires all cl_scenarios to "
+            "share one embedding -- use create_unified_cl_scenarios(...), not "
+            "create_cl_scenarios(...)."
+        )
+
+    p_batch = irx.Interval(
+        lower=jnp.stack([s.p_interval.lower for s in cl_scenarios]),
+        upper=jnp.stack([s.p_interval.upper for s in cl_scenarios]),
+    )
+    obs_offset_batch = jnp.stack([s.obs_offset for s in cl_scenarios])  # (n, 2)
+    obs_scale_batch  = jnp.stack([s.obs_scale for s in cl_scenarios])   # (n, 1)
+    i_idx = jnp.array([i for i, j in pairs])
+    j_idx = jnp.array([j for i, j in pairs])
+
+    def step_all(x_ivl_single, p_ivl_single):
+        return cl_euler_step(emb_sys, x_ivl_single, theta, p_ivl_single, dt)
+
+    def obs_of(x_lower, x_upper, offset, scale):
+        return offset + scale * x_lower[:2], offset + scale * x_upper[:2]
+
+    def cbf_of(x_lower, x_upper):
+        return cbf_penalty_interval(irx.Interval(lower=x_lower, upper=x_upper), obstacles)
+
+    def arr_to_ivl_batch(arr):
+        return irx.Interval(lower=arr[:, :xlen], upper=arr[:, xlen:])
+
+    # ── Step 1: propagate all n scenarios in ONE vmapped call ─────────────
+    x1_batch = jax.vmap(lambda p: step_all(x0_ivl, p))(p_batch)
+    obs1_lo, obs1_hi = jax.vmap(obs_of)(x1_batch.lower, x1_batch.upper,
+                                        obs_offset_batch, obs_scale_batch)
+    obs1_i = irx.Interval(lower=obs1_lo[i_idx], upper=obs1_hi[i_idx])
+    obs1_j = irx.Interval(lower=obs1_lo[j_idx], upper=obs1_hi[j_idx])
+    sep_cost1 = jnp.sum(jax.vmap(overlap_size_lax)(obs1_i, obs1_j))
+    min_sep_cost = sep_cost1
+
+    cbf_pen = jnp.sum(jax.vmap(cbf_of)(x1_batch.lower, x1_batch.upper))
+
+    x_arr   = jnp.concatenate([x1_batch.lower, x1_batch.upper], axis=-1)   # (n, 2*xlen)
+    pxi_arr = x_arr[i_idx]   # (n_pairs, 2*xlen)
+    pxj_arr = x_arr[j_idx]
+
+    # ── Steps 2 … num_steps via fori_loop (O(1) graph size in num_steps) ──
+    def step_body(_, carry):
+        x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost = carry
+
+        # Unrefined propagation for CBF -- one vmapped call over n scenarios
+        x_next_batch = jax.vmap(step_all)(arr_to_ivl_batch(x_arr), p_batch)
+        x_next_arr = jnp.concatenate([x_next_batch.lower, x_next_batch.upper], axis=-1)
+        cbf_pen = cbf_pen + jnp.sum(jax.vmap(cbf_of)(x_next_batch.lower, x_next_batch.upper))
+
+        # Intersection refinement, vectorized over n_pairs
+        xi_lo, xi_hi = pxi_arr[:, :xlen], pxi_arr[:, xlen:]
+        xj_lo, xj_hi = pxj_arr[:, :xlen], pxj_arr[:, xlen:]
+
+        obs_offset_i, obs_scale_i = obs_offset_batch[i_idx], obs_scale_batch[i_idx]
+        obs_offset_j, obs_scale_j = obs_offset_batch[j_idx], obs_scale_batch[j_idx]
+
+        obs_i_lo = obs_offset_i + obs_scale_i * xi_lo[:, :2]
+        obs_i_hi = obs_offset_i + obs_scale_i * xi_hi[:, :2]
+        obs_j_lo = obs_offset_j + obs_scale_j * xj_lo[:, :2]
+        obs_j_hi = obs_offset_j + obs_scale_j * xj_hi[:, :2]
+
+        y_lo = jnp.maximum(obs_i_lo, obs_j_lo)
+        y_hi = jnp.minimum(obs_i_hi, obs_j_hi)
+        has_overlap = jnp.all(y_hi >= y_lo, axis=-1)   # (n_pairs,)
+
+        fallback  = (xi_lo[:, :2] + xi_hi[:, :2]) / 2
+        y_lo_safe = jnp.where(has_overlap[:, None], y_lo, fallback)
+        y_hi_safe = jnp.where(has_overlap[:, None], y_hi, fallback)
+
+        xi_ref_lo = jnp.concatenate([(y_lo_safe - obs_offset_i) / obs_scale_i, xi_lo[:, 2:3]], axis=-1)
+        xi_ref_hi = jnp.concatenate([(y_hi_safe - obs_offset_i) / obs_scale_i, xi_hi[:, 2:3]], axis=-1)
+        xj_ref_lo = jnp.concatenate([(y_lo_safe - obs_offset_j) / obs_scale_j, xj_lo[:, 2:3]], axis=-1)
+        xj_ref_hi = jnp.concatenate([(y_hi_safe - obs_offset_j) / obs_scale_j, xj_hi[:, 2:3]], axis=-1)
+
+        # Propagate BOTH pair sides in one vmap over the concatenated (2*n_pairs,) batch
+        xref_lo = jnp.concatenate([xi_ref_lo, xj_ref_lo], axis=0)
+        xref_hi = jnp.concatenate([xi_ref_hi, xj_ref_hi], axis=0)
+        p_i = irx.Interval(lower=p_batch.lower[i_idx], upper=p_batch.upper[i_idx])
+        p_j = irx.Interval(lower=p_batch.lower[j_idx], upper=p_batch.upper[j_idx])
+        p_ref = irx.Interval(
+            lower=jnp.concatenate([p_i.lower, p_j.lower], axis=0),
+            upper=jnp.concatenate([p_i.upper, p_j.upper], axis=0),
+        )
+        xref = irx.Interval(lower=xref_lo, upper=xref_hi)
+        xn_batch = jax.vmap(step_all)(xref, p_ref)
+        xn_i = irx.Interval(lower=xn_batch.lower[:n_pairs], upper=xn_batch.upper[:n_pairs])
+        xn_j = irx.Interval(lower=xn_batch.lower[n_pairs:], upper=xn_batch.upper[n_pairs:])
+
+        obs_ni = irx.Interval(lower=obs_offset_i + obs_scale_i * xn_i.lower[:, :2],
+                              upper=obs_offset_i + obs_scale_i * xn_i.upper[:, :2])
+        obs_nj = irx.Interval(lower=obs_offset_j + obs_scale_j * xn_j.lower[:, :2],
+                              upper=obs_offset_j + obs_scale_j * xn_j.upper[:, :2])
+        raw_cost = jax.vmap(overlap_size_lax)(obs_ni, obs_nj)   # (n_pairs,)
+        step_sep_cost = jnp.sum(jnp.where(has_overlap, raw_cost, 0.0))
+
+        min_sep_cost = jnp.minimum(min_sep_cost, step_sep_cost)
+        new_pxi_arr = jnp.concatenate([xn_i.lower, xn_i.upper], axis=-1)
+        new_pxj_arr = jnp.concatenate([xn_j.lower, xn_j.upper], axis=-1)
+        return (x_next_arr, new_pxi_arr, new_pxj_arr, cbf_pen, min_sep_cost)
+
+    init_carry = (x_arr, pxi_arr, pxj_arr, cbf_pen, min_sep_cost)
+    _, _, _, cbf_pen_final, min_sep_cost_final = jax.lax.fori_loop(
+        0, num_steps - 1, step_body, init_carry
+    )
+
+    return min_sep_cost_final + cbf_weight * cbf_pen_final
+
+
+def optimize_output_feedback_cbf_vmapped_gpu(
+    cl_scenarios: List[Scenario],
+    x0_ivl: irx.Interval,
+    dt: float,
+    num_steps: int,
+    obstacles: jnp.ndarray,
+    cbf_weight: float = 1.0,
+    num_restarts: int = 100,
+    learning_rate: float = 0.01,
+    num_iters: int = 200,
+    seed: int = 42,
+    init_std: float = 0.1,
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Same as optimize_output_feedback_cbf_gpu but (a) uses
+    separation_cbf_loss_refined_vmapped (requires cl_scenarios from
+    create_unified_cl_scenarios) and (b) fuses the per-iteration loss+grad
+    into ONE jax.vmap(jax.value_and_grad(loss_fn)) call instead of separate
+    batched_loss=vmap(loss_fn) and batched_grad=vmap(grad(loss_fn)) tracings
+    -- jax.grad already reruns the forward pass internally, so tracing the
+    (expensive interval-propagation) forward graph a second time for
+    batched_loss alone was duplicated compile work. value_and_grad traces
+    the forward pass once and reuses it for both outputs; the final
+    per-restart loss used to pick the best restart now comes from the last
+    GD iteration's value_and_grad call instead of a separate closing
+    batched_loss(theta_final) call.
+
+    `init_std`: stddev of the per-component Gaussian used to sample theta0
+    around theta_mean (K=0, r=[0.5,0]). Originally hardcoded to 0.1 -- found
+    (this session) to keep essentially every restart's K within a tiny
+    neighborhood of 0, and combined with a near-vanishing gradient signal
+    (loss's min-over-steps + has_overlap masking only backprops through one
+    active step/pair at a time) and plain (non-normalized) GD at
+    learning_rate=0.01, the winning restart moved ||K_final-K0||=0.0006 over
+    20 iterations -- i.e. GD did essentially nothing and the reported
+    "optimum" was just the best of 100 random draws. Widening init_std
+    (e.g. to 1.0, still well inside the [-5,5] K clip range) spreads
+    restarts across a much larger part of theta-space up front, so more of
+    them start already exciting meaningful K@y feedback (and hence omega)
+    rather than relying on GD to discover it from a near-zero start.
+    """
+    key        = jax.random.PRNGKey(seed)
+    theta_mean = jnp.concatenate([jnp.zeros(4), jnp.array([0.5, 0.0])])
+    theta0     = jax.random.normal(key, (num_restarts, 6)) * init_std + theta_mean
+
+    def loss_fn(theta):
+        return separation_cbf_loss_refined_vmapped(
+            theta=theta, x0_ivl=x0_ivl, cl_scenarios=cl_scenarios, dt=dt,
+            num_steps=num_steps, obstacles=obstacles, cbf_weight=cbf_weight,
+        )
+
+    batched_value_and_grad = jax.vmap(jax.value_and_grad(loss_fn))
+
+    def body(_, carry):
+        theta_batch, _prev_losses = carry
+        losses, g = batched_value_and_grad(theta_batch)
+        return (_project_theta(theta_batch - learning_rate * g), losses)
+
+    init_losses = jnp.zeros(num_restarts)
+    theta_final, losses = jax.lax.fori_loop(0, num_iters, body, (theta0, init_losses))
+    # One more value_and_grad call so `losses` reflects theta_final (the
+    # fori_loop's carried `losses` are evaluated at the PRE-update theta of
+    # the final iteration, one step stale) -- matches optimize_output_
+    # feedback_cbf_gpu's semantics of returning batched_loss(theta_final).
+    losses, _ = batched_value_and_grad(theta_final)
+
+    best_idx   = jnp.argmin(losses)
+    best_theta = theta_final[best_idx]
+    best_loss  = losses[best_idx]
+    return best_theta, best_loss, theta_final, losses
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 7b.  Tracking output-feedback controller
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1066,6 +1399,58 @@ def optimize_tracking_cbf_gpu(
     best_idx     = jnp.argmin(losses)
     best_theta   = theta_final[best_idx]   # (num_steps, 4)
     best_loss    = losses[best_idx]
+    return best_theta, best_loss, theta_final, losses
+
+
+def optimize_tracking_cbf_vmapped_gpu(
+    x0_ivl: irx.Interval,
+    cl_scenarios: List[Scenario],
+    dt: float,
+    y_hat_seq: jnp.ndarray,
+    obstacles: jnp.ndarray,
+    cbf_weight: float = 1.0,
+    num_restarts: int = 100,
+    learning_rate: float = 0.1,
+    num_iters: int = 200,
+    seed: int = 42,
+    num_substeps: int = 1,
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Same as optimize_tracking_cbf_gpu, but fuses batched_loss/batched_grad
+    into one jax.vmap(jax.value_and_grad(...)) call -- tracking_cbf_loss
+    itself was already vmapped/scanned (see its docstring), but the OUTER
+    optimizer still traced the forward loss graph twice (once for
+    batched_loss, once inside batched_grad), the same redundancy fixed for
+    optimize_output_feedback_cbf_vmapped_gpu. Caller should wrap this in an
+    outer jax.jit before timing/deploying it -- see that function's
+    docstring for why (avoids the eager-fori_loop+vmap near-OOM found
+    earlier this session)."""
+    num_steps = y_hat_seq.shape[0]
+    key       = jax.random.PRNGKey(seed)
+    theta0    = jax.random.normal(key, (num_restarts, num_steps, 6)) * 0.1
+
+    def loss_fn(theta_seq):
+        return tracking_cbf_loss(
+            theta_seq, x0_ivl=x0_ivl, cl_scenarios=cl_scenarios, dt=dt,
+            y_hat_seq=y_hat_seq, obstacles=obstacles, cbf_weight=cbf_weight,
+            num_substeps=num_substeps,
+        )
+
+    batched_value_and_grad = jax.vmap(jax.value_and_grad(loss_fn))
+
+    def body(_, carry):
+        theta_batch, _prev_losses = carry
+        losses, g = batched_value_and_grad(theta_batch)
+        return (jnp.clip(theta_batch - learning_rate * g, _THETA_LO_TRACK, _THETA_HI_TRACK), losses)
+
+    init_losses = jnp.zeros(num_restarts)
+    theta_final, losses = jax.lax.fori_loop(0, num_iters, body, (theta0, init_losses))
+    losses, _ = batched_value_and_grad(theta_final)   # re-evaluate at theta_final (see
+                                                       # optimize_output_feedback_cbf_vmapped_gpu's
+                                                       # docstring for why)
+
+    best_idx   = jnp.argmin(losses)
+    best_theta = theta_final[best_idx]
+    best_loss  = losses[best_idx]
     return best_theta, best_loss, theta_final, losses
 
 
@@ -1365,7 +1750,14 @@ if __name__ == "__main__":
     print("FAULTY CAR OUTPUT-FEEDBACK CONTROLLER + COLLISION-AVOIDANCE CBF")
     print("=" * 70)
 
-    cl_scenarios = create_cl_scenarios(actuator_alpha_lo=0.0, actuator_alpha_hi=0.5)
+    # Unified embedding (all 3 scenarios share ONE traced/differentiated
+    # embedding -- see CarUnifiedCLSystem's docstring) + the vmapped,
+    # value_and_grad-fused loss/optimizer -- both added this session to fix
+    # a >3x compile-time regression from the original Python-loop-over-
+    # scenarios/pairs + separate loss/grad tracing implementation. Verified
+    # bit-identical output to the original on the pre-fix config before
+    # any of the settings below were tuned.
+    cl_scenarios = create_unified_cl_scenarios(actuator_alpha_lo=0.0, actuator_alpha_hi=0.5)
     print(f"\n{len(cl_scenarios)} closed-loop fault scenarios:")
     for s in cl_scenarios:
         print(f"  • {s.name}")
@@ -1387,24 +1779,50 @@ if __name__ == "__main__":
     print(f"\nObstacle: centre ({float(obstacles[0,0]):.2f}, {float(obstacles[0,1]):.2f}) m,"
           f"  radius {float(obstacles[0,2]):.2f} m")
 
-    dt, num_steps = 0.05, 20
+    # 5s horizon / 10 steps (up from the original 1s/20 steps -- the short
+    # horizon never let the actuator-fault pair excite omega enough to
+    # separate; see this module's history comment on _K_MAX for the full
+    # tuning trace). dt=0.5s per step means ONE big Euler step per segment
+    # (no sub-stepping) -- this is why _K_MAX is bounded (see below): large
+    # K under this coarse integration compounds into wrapping-effect box
+    # blow-up that produces a misleadingly-low loss without genuine
+    # (raw-independent-box) separation.
+    dt, num_steps = 0.5, 10
     cbf_weight    = 2.0
     print(f"\nHorizon: {num_steps} × {dt} s = {num_steps * dt:.2f} s")
     print(f"CBF weight: {cbf_weight}")
 
-    print("\nRunning output-feedback + CBF optimisation …\n")
-    K, r, loss = optimize_output_feedback_cbf(
+    # Tuned this session (see _K_MAX's history comment for the full sweep):
+    # K_MAX=2.0 is the empirically-verified threshold between genuine
+    # (raw-box, not just refined-metric) separation and wrapping-effect
+    # blow-up; init_std=1.0 (up from an original 0.1, which left GD unable
+    # to move off its near-zero-K starting point) plus a larger
+    # learning_rate=2.0 let 1000 restarts search effectively in just 2 GD
+    # iterations, holding steady-state run time to ~32ms (<40ms budget) on
+    # the GPU present on this machine. Best verified result at this exact
+    # config: loss~4.7e-5, all 3 pairs' raw independent-box overlap
+    # ~1e-5-1e-4 m^2 (vs. ~0.06 m^2 box size) and stable/non-growing --
+    # negligible relative to a coarser (3 iters/LR=1.5) alternative that
+    # LOOKED similar by loss value (0.000044) but left a persistent, real
+    # 0.053 m^2 gap on the Nominal-vs-Sensor-Fault pair. Always check the
+    # raw per-pair overlap directly (see plot/diagnostic scripts), not just
+    # the scalar loss, before trusting a result from this optimizer.
+    print("\nRunning output-feedback + CBF optimisation (unified/vmapped, GPU) …\n")
+    best_theta, best_loss, theta_final, losses = optimize_output_feedback_cbf_vmapped_gpu(
         x0_ivl=x0_ivl,
         cl_scenarios=cl_scenarios,
         dt=dt,
         num_steps=num_steps,
         obstacles=obstacles,
         cbf_weight=cbf_weight,
-        num_restarts=100,
-        learning_rate=0.01,
-        num_iters=300,
+        num_restarts=1000,
+        learning_rate=2.0,
+        num_iters=2,
         seed=42,
+        init_std=1.0,
     )
+    K, r = theta_to_K_r(best_theta)
+    loss = float(best_loss)
 
     print("=" * 70)
     print("RESULTS")

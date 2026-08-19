@@ -1,0 +1,16 @@
+=== multistep_refined: 60 successful configs -> 180 (config, true_mode) cells ===
+  [multistep_refined] config 10/60  elapsed=  56.6s  ~0.53 cells/s
+  [multistep_refined] config 20/60  elapsed= 112.9s  ~0.53 cells/s
+  [multistep_refined] config 30/60  elapsed= 169.6s  ~0.53 cells/s
+  [multistep_refined] config 40/60  elapsed= 227.6s  ~0.53 cells/s
+  [multistep_refined] config 50/60  elapsed= 284.2s  ~0.53 cells/s
+  [multistep_refined] config 60/60  elapsed= 343.4s  ~0.52 cells/s
+=== multistep_unrefined: 42 successful configs -> 126 (config, true_mode) cells ===
+  [multistep_unrefined] config 10/42  elapsed= 402.4s  ~0.52 cells/s
+  [multistep_unrefined] config 20/42  elapsed= 464.7s  ~0.52 cells/s
+  [multistep_unrefined] config 30/42  elapsed= 523.2s  ~0.52 cells/s
+  [multistep_unrefined] config 40/42  elapsed= 584.3s  ~0.51 cells/s
+  [multistep_unrefined] config 42/42  elapsed= 595.4s  ~0.51 cells/s
+
+Total wall time: 595.4s over 306 cells (76500 trials)
+Wrote robotarium_diagnosis_mc.npz

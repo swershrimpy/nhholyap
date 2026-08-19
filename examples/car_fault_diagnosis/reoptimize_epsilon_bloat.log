@@ -1,0 +1,120 @@
+
+======================================================================
+Epsilon = 5 mm
+======================================================================
+  optimized 12 configs in 54.0s (compile 48822ms, run 2591ms)
+  config  13: bloated-loss=0.00e+00  fine worst-overlap= 160.03mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  44: bloated-loss=0.00e+00  fine worst-overlap= 484.77mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  48: bloated-loss=0.00e+00  fine worst-overlap= 410.88mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  68: bloated-loss=0.00e+00  fine worst-overlap= 241.14mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  71: bloated-loss=0.00e+00  fine worst-overlap= 421.97mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  73: bloated-loss=0.00e+00  fine worst-overlap= 332.36mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  74: bloated-loss=0.00e+00  fine worst-overlap= 223.93mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  75: bloated-loss=0.00e+00  fine worst-overlap= 252.48mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  76: bloated-loss=0.00e+00  fine worst-overlap= 258.55mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  77: bloated-loss=8.60e-03  fine worst-overlap= 240.07mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  78: bloated-loss=0.00e+00  fine worst-overlap= 320.54mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  80: bloated-loss=0.00e+00  fine worst-overlap= 280.21mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+
+======================================================================
+Epsilon = 10 mm
+======================================================================
+  optimized 12 configs in 53.8s (compile 48520ms, run 2613ms)
+  config  13: bloated-loss=0.00e+00  fine worst-overlap= 160.03mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  44: bloated-loss=0.00e+00  fine worst-overlap= 486.06mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  48: bloated-loss=0.00e+00  fine worst-overlap= 496.06mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  68: bloated-loss=0.00e+00  fine worst-overlap= 241.14mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  71: bloated-loss=0.00e+00  fine worst-overlap= 182.58mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  73: bloated-loss=0.00e+00  fine worst-overlap= 331.51mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  74: bloated-loss=0.00e+00  fine worst-overlap= 223.26mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  75: bloated-loss=0.00e+00  fine worst-overlap= 311.00mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  76: bloated-loss=0.00e+00  fine worst-overlap= 258.58mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  77: bloated-loss=1.08e-02  fine worst-overlap= 240.08mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  78: bloated-loss=0.00e+00  fine worst-overlap= 322.16mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  80: bloated-loss=1.50e-02  fine worst-overlap= 280.11mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+
+======================================================================
+Epsilon = 25 mm
+======================================================================
+  optimized 12 configs in 57.0s (compile 51739ms, run 2574ms)
+  config  13: bloated-loss=0.00e+00  fine worst-overlap= 182.83mm (('Actuator Fault', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  44: bloated-loss=0.00e+00  fine worst-overlap= 534.08mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  48: bloated-loss=0.00e+00  fine worst-overlap= 310.97mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  68: bloated-loss=0.00e+00  fine worst-overlap= 241.14mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  71: bloated-loss=0.00e+00  fine worst-overlap= 182.27mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  73: bloated-loss=0.00e+00  fine worst-overlap= 364.33mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  74: bloated-loss=0.00e+00  fine worst-overlap= 363.11mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  75: bloated-loss=1.32e-02  fine worst-overlap= 220.02mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  76: bloated-loss=0.00e+00  fine worst-overlap= 264.27mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  77: bloated-loss=1.89e-02  fine worst-overlap= 240.05mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  78: bloated-loss=0.00e+00  fine worst-overlap= 267.75mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  80: bloated-loss=4.49e-02  fine worst-overlap= 280.05mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+
+======================================================================
+Epsilon = 50 mm
+======================================================================
+  optimized 12 configs in 55.7s (compile 50346ms, run 2599ms)
+  config  13: bloated-loss=0.00e+00  fine worst-overlap= 183.51mm (('Actuator Fault', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  44: bloated-loss=0.00e+00  fine worst-overlap= 365.54mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  48: bloated-loss=3.13e-02  fine worst-overlap= 240.28mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  68: bloated-loss=0.00e+00  fine worst-overlap= 244.38mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  71: bloated-loss=0.00e+00  fine worst-overlap= 181.86mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  73: bloated-loss=0.00e+00  fine worst-overlap= 302.77mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  74: bloated-loss=0.00e+00  fine worst-overlap= 364.36mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  75: bloated-loss=2.82e-02  fine worst-overlap= 220.03mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  76: bloated-loss=0.00e+00  fine worst-overlap= 665.60mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  77: bloated-loss=3.75e-02  fine worst-overlap= 240.15mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  78: bloated-loss=0.00e+00  fine worst-overlap= 282.37mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  80: bloated-loss=5.61e-02  fine worst-overlap= 280.10mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+
+======================================================================
+Epsilon = 100 mm
+======================================================================
+  optimized 12 configs in 53.6s (compile 48263ms, run 2627ms)
+  config  13: bloated-loss=0.00e+00  fine worst-overlap= 184.45mm (('Actuator Fault', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  44: bloated-loss=0.00e+00  fine worst-overlap= 214.18mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  48: bloated-loss=7.87e-02  fine worst-overlap= 240.15mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  68: bloated-loss=0.00e+00  fine worst-overlap= 249.76mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  71: bloated-loss=0.00e+00  fine worst-overlap= 181.46mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  73: bloated-loss=0.00e+00  fine worst-overlap= 299.45mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  74: bloated-loss=0.00e+00  fine worst-overlap= 322.79mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  75: bloated-loss=7.07e-02  fine worst-overlap= 220.06mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  76: bloated-loss=0.00e+00  fine worst-overlap= 666.49mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  77: bloated-loss=8.72e-02  fine worst-overlap= 240.28mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  78: bloated-loss=0.00e+00  fine worst-overlap= 433.59mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  80: bloated-loss=1.12e-01  fine worst-overlap= 280.58mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+
+======================================================================
+Epsilon = 200 mm
+======================================================================
+  optimized 12 configs in 54.3s (compile 48917ms, run 2637ms)
+  config  13: bloated-loss=0.00e+00  fine worst-overlap= 185.40mm (('Actuator Fault', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  44: bloated-loss=0.00e+00  fine worst-overlap= 299.29mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  48: bloated-loss=0.00e+00  fine worst-overlap= 441.14mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  68: bloated-loss=0.00e+00  fine worst-overlap= 249.55mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  71: bloated-loss=0.00e+00  fine worst-overlap= 180.03mm (('Nominal', 'Actuator Fault'))  -> converged but STILL overlaps at fine res.
+  config  73: bloated-loss=0.00e+00  fine worst-overlap= 288.36mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  74: bloated-loss=0.00e+00  fine worst-overlap= 285.40mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  75: bloated-loss=2.14e-01  fine worst-overlap= 220.34mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  76: bloated-loss=0.00e+00  fine worst-overlap= 357.06mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  77: bloated-loss=2.41e-01  fine worst-overlap= 240.30mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+  config  78: bloated-loss=0.00e+00  fine worst-overlap= 279.45mm (('Nominal', 'Sensor Fault'))  -> converged but STILL overlaps at fine res.
+  config  80: bloated-loss=2.84e-01  fine worst-overlap= 280.69mm (('Nominal', 'Actuator Fault'))  -> did not converge (no margin achievable)
+
+======================================================================
+Summary
+======================================================================
+  config  13: NOT resolved up to epsilon=200mm  (last: worst-overlap=185.4mm, converged=True)
+  config  44: NOT resolved up to epsilon=200mm  (last: worst-overlap=299.3mm, converged=True)
+  config  48: NOT resolved up to epsilon=200mm  (last: worst-overlap=441.1mm, converged=True)
+  config  68: NOT resolved up to epsilon=200mm  (last: worst-overlap=249.6mm, converged=True)
+  config  71: NOT resolved up to epsilon=200mm  (last: worst-overlap=180.0mm, converged=True)
+  config  73: NOT resolved up to epsilon=200mm  (last: worst-overlap=288.4mm, converged=True)
+  config  74: NOT resolved up to epsilon=200mm  (last: worst-overlap=285.4mm, converged=True)
+  config  75: NOT resolved up to epsilon=200mm  (last: worst-overlap=220.3mm, converged=False)
+  config  76: NOT resolved up to epsilon=200mm  (last: worst-overlap=357.1mm, converged=True)
+  config  77: NOT resolved up to epsilon=200mm  (last: worst-overlap=240.3mm, converged=False)
+  config  78: NOT resolved up to epsilon=200mm  (last: worst-overlap=279.4mm, converged=True)
+  config  80: NOT resolved up to epsilon=200mm  (last: worst-overlap=280.7mm, converged=False)
+
+Wrote reoptimize_epsilon_bloat.npz

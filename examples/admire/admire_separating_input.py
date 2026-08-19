@@ -695,6 +695,95 @@ def optimize_multistep_gpu_rejit(
     return best_u, best_loss, u_final, losses
 
 
+def optimize_multistep_gpu_fused(
+    x0_ivl: irx.Interval,
+    scenarios: List[Scenario],
+    dt: float,
+    steps_per_segment: int,
+    num_segments: int,
+    learning_rate: float = 0.05,
+    num_iters: int = 200,
+    num_restarts: int = 50,
+    seed: int = 42,
+    init_scale: float = 0.05,
+    u0_mean: jnp.ndarray = None,
+):
+    """Same as optimize_multistep_gpu_rejit but fuses batched_loss/batched_grad
+    into one jax.vmap(jax.value_and_grad(...)) call instead of separate
+    tracings -- jax.grad already reruns the forward pass internally, so
+    building batched_loss=vmap(loss_fn) and batched_grad=vmap(grad(loss_fn))
+    separately duplicates that forward-graph compile (same fix applied to
+    faulty_car_output_feedback_cbf.py's CBF optimizer in that module's
+    history). separation_loss_multistep itself was already vmapped over
+    scenarios (see its docstring), so this only fixes the outer optimizer's
+    redundant tracing, not a Python-loop-over-scenarios issue.
+
+    Caller should wrap this in an outer jax.jit before timing/deploying it
+    (matches this project's established "always jit-wrap the whole
+    optimize_*_gpu call" finding -- calling this class of optimizer eagerly
+    risks a severe host-memory blowup).
+
+    `init_scale`: half-width of the uniform u0 sampling range (was hardcoded
+    to 0.05 in optimize_multistep_gpu_rejit). _project_u's actual clip bound
+    is +-0.5 rad -- 10x wider than the original 0.05 init range. Found (this
+    session, mirroring faulty_car_output_feedback_cbf.py's init_std finding)
+    that this narrow default leaves GD unable to move the loss meaningfully
+    (0.0534 at 40 iters -> 0.0502 at 200 iters, ~6% improvement for 5x more
+    iterations) -- widen this to let restarts actually explore the feasible
+    control range instead of relying on GD to discover it from a narrow
+    near-zero start.
+
+    `u0_mean`: optional (num_segments, 10) array. If given, restarts are
+    sampled as u0_mean + U(-init_scale, init_scale) instead of centered at
+    zero -- lets a caller warm-start from an informed/"smart" guess (see
+    admire_staged_opt_minimal.ipynb, which hand-designs an initial guess
+    that specifically excites the historically-hardest-to-separate channel
+    and converges in ~10 GD steps from a single trajectory, no random
+    restarts at all -- num_restarts/num_iters/init_scale can all be cut
+    drastically once the search starts from a good point instead of blind
+    random exploration).
+
+    Returns: best_u_seq (S,10), best_loss, all_u_seq_final (R,S,10), all_losses (R,)
+    """
+    key = jax.random.PRNGKey(seed)
+    noise = jax.random.uniform(
+        key, (num_restarts, num_segments, 10), minval=-init_scale, maxval=init_scale
+    )
+    u0 = noise if u0_mean is None else noise + u0_mean[None, :, :]
+
+    def loss_fn(u):
+        return separation_loss_multistep(
+            u_seq=u, x0_ivl=x0_ivl, scenarios=scenarios,
+            dt=dt, steps_per_segment=steps_per_segment,
+        )
+
+    batched_value_and_grad = jax.vmap(jax.value_and_grad(loss_fn))
+
+    def body(_, carry):
+        u_batch, _prev_losses = carry
+        losses, g = batched_value_and_grad(u_batch)
+        return (_project_u(u_batch - learning_rate * g), losses)
+
+    init_losses = jnp.zeros(num_restarts)
+    u_final, losses = jax.lax.fori_loop(0, num_iters, body, (u0, init_losses))
+    # Re-evaluate at u_final so `losses` isn't one-iteration stale (the
+    # fori_loop's carried `losses` reflect the PRE-update u of the final
+    # iteration) -- matches optimize_multistep_gpu_rejit's semantics of
+    # returning batched_loss(u_final).
+    losses, _ = batched_value_and_grad(u_final)
+
+    # NaN-safe selection (a restart can go NaN, e.g. from a too-large dt --
+    # see multistep_unrefined_demo.py's history -- and plain jnp.argmin does
+    # NOT reliably skip NaN entries, so an un-guarded argmin can silently
+    # return a NaN "best" even when better non-NaN restarts exist). Matches
+    # optimize_refined_sequence_gpu's existing NaN-guard convention.
+    losses_valid = jnp.where(jnp.isnan(losses), jnp.inf, losses)
+    best_idx  = jnp.argmin(losses_valid)
+    best_u    = u_final[best_idx]
+    best_loss = losses[best_idx]
+    return best_u, best_loss, u_final, losses
+
+
 def optimize_multistep_gpu(
     opt: MultistepSequenceOptimizer,
     num_restarts: int = 50,
