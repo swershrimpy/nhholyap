@@ -105,6 +105,75 @@ import matplotlib.patches as patches
 import matplotlib.lines as mlines
 
 # ══════════════════════════════════════════════════════════════════════════
+# Vendored copies of at_pose / create_hybrid_unicycle_pose_controller (plus
+# its create_si_to_uni_dynamics dependency), defined locally to SHADOW
+# whatever the `from rps.utilities.* import *` lines above happened to pull
+# in. The Robotarium hardware submission environment's installed rps build
+# does not define create_hybrid_unicycle_pose_controller at all (NameError
+# observed on an actual submission run, even though the same wildcard
+# import resolved everything else this script needs -- consistent with the
+# earlier `.axes` AttributeError also seen on that build: its installed rps
+# is a different/older version than the local rps.robotarium simulator this
+# script was dry-run against). Don't depend on the installed library having
+# these two functions; these are pure-numpy copies matching
+# rps.utilities.transformations.create_si_to_uni_dynamics,
+# rps.utilities.controllers.create_hybrid_unicycle_pose_controller, and
+# rps.utilities.misc.at_pose's own implementations (argument-checking
+# asserts dropped since call sites here are internally controlled).
+# ══════════════════════════════════════════════════════════════════════════
+def create_si_to_uni_dynamics(linear_velocity_gain=1, angular_velocity_limit=np.pi):
+    def si_to_uni_dyn(dxi, poses):
+        a = np.cos(poses[2, :])
+        b = np.sin(poses[2, :])
+        dxu = np.zeros((2, dxi.shape[1]))
+        dxu[0, :] = linear_velocity_gain * (a * dxi[0, :] + b * dxi[1, :])
+        dxu[1, :] = angular_velocity_limit * np.arctan2(-b * dxi[0, :] + a * dxi[1, :], dxu[0, :]) / (np.pi / 2)
+        return dxu
+    return si_to_uni_dyn
+
+
+def create_hybrid_unicycle_pose_controller(linear_velocity_gain=1, angular_velocity_gain=2,
+                                            velocity_magnitude_limit=0.15, angular_velocity_limit=np.pi,
+                                            position_error=0.05, position_epsilon=0.03, rotation_error=0.05):
+    si_to_uni_dyn = create_si_to_uni_dynamics(linear_velocity_gain=linear_velocity_gain,
+                                               angular_velocity_limit=angular_velocity_limit)
+
+    def pose_uni_hybrid_controller(states, poses, approach_state=np.empty([0, 0])):
+        N = states.shape[1]
+        dxu = np.zeros((2, N))
+        if approach_state.shape[1] != N:
+            approach_state = np.ones((1, N))[0]
+        for i in range(N):
+            wrapped = poses[2, i] - states[2, i]
+            wrapped = np.arctan2(np.sin(wrapped), np.cos(wrapped))
+            dxi = poses[:2, [i]] - states[:2, [i]]
+            norm_ = np.linalg.norm(dxi)
+            if norm_ > (position_error - position_epsilon) and approach_state[i]:
+                if norm_ > velocity_magnitude_limit:
+                    dxi = velocity_magnitude_limit * dxi / norm_
+                dxu[:, [i]] = si_to_uni_dyn(dxi, states[:, [i]])
+            elif np.absolute(wrapped) > rotation_error:
+                approach_state[i] = 0
+                if norm_ > position_error:
+                    approach_state = 1
+                dxu[0, i] = 0
+                dxu[1, i] = angular_velocity_gain * wrapped
+            else:
+                dxu[:, [i]] = np.zeros((2, 1))
+        return dxu
+
+    return pose_uni_hybrid_controller
+
+
+def at_pose(states, poses, position_error=0.05, rotation_error=0.2):
+    res = states[2, :] - poses[2, :]
+    res = np.abs(np.arctan2(np.sin(res), np.cos(res)))
+    pes = np.linalg.norm(states[:2, :] - poses[:2, :], 2, 0)
+    done = np.nonzero((res <= rotation_error) & (pes <= position_error))
+    return done
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Config constants -- see module docstring "Config selection" /
 # "Regenerating the embedded constants". method=multistep_unrefined, config_idx=13.
 # ══════════════════════════════════════════════════════════════════════════
@@ -295,6 +364,21 @@ initial_conditions = X0_CENTER.reshape(3, 1).copy()   # .copy() is load-bearing:
 # trajectory happened to end instead of from the true x0.
 r = robotarium.Robotarium(number_of_robots=N, show_figure=True,
                           initial_conditions=initial_conditions, sim_in_real_time=True)
+# The Robotarium hardware submission environment's rps build does not
+# expose `.axes` on the Robotarium object (AttributeError observed on
+# an actual submission run), even though show_figure=True still builds a
+# matplotlib figure internally (confirmed by that run's own
+# "FigureCanvasAgg is non-interactive" warning from its internal
+# plt.show() call) -- so locate the Axes defensively instead of
+# assuming an attribute name, falling all the way back to a standalone
+# figure if the Robotarium object exposes neither .axes nor .figure.
+ax = getattr(r, "axes", None)
+if ax is None:
+    _r_fig = getattr(r, "figure", None)
+    if _r_fig is not None and getattr(_r_fig, "axes", None):
+        ax = _r_fig.axes[0]
+if ax is None:
+    _, ax = plt.subplots()
 # No unicycle_barrier_certificate: not needed for N=1 (no collision risk),
 # and confirmed actively harmful here -- wrapping the reset drive's dxu
 # through it introduced a small spurious linear-velocity component
@@ -318,7 +402,7 @@ for name in ("Nominal", "Actuator Fault", "Sensor Fault"):
         rect = patches.Rectangle((TUBE_LO[name][k, 0], TUBE_LO[name][k, 1]), w, h,
                                  facecolor=TUBE_COLOR[name], alpha=0.15,
                                  edgecolor=TUBE_COLOR[name], linewidth=0.8)
-        r.axes.add_patch(rect)
+        ax.add_patch(rect)
     legend_handles.append(patches.Patch(facecolor=TUBE_COLOR[name], alpha=0.3,
                                         edgecolor=TUBE_COLOR[name], label=name))
 
@@ -431,11 +515,11 @@ for mode in ("Nominal", "Actuator Fault", "Sensor Fault"):
 # ══════════════════════════════════════════════════════════════════════════
 for mode in ("Nominal", "Actuator Fault", "Sensor Fault"):
     traj = measured_by_mode[mode]
-    r.axes.plot(traj[:, 0], traj[:, 1], color="black", linewidth=1.5,
+    ax.plot(traj[:, 0], traj[:, 1], color="black", linewidth=1.5,
                marker=MODE_MARKER[mode], markersize=6, zorder=10)
     legend_handles.append(mlines.Line2D([0], [0], color="black", marker=MODE_MARKER[mode],
                                         linestyle="-", label=f"Measured ({mode})"))
-r.axes.legend(handles=legend_handles, loc="upper left", fontsize=7)
+ax.legend(handles=legend_handles, loc="upper left", fontsize=7)
 
 # ══════════════════════════════════════════════════════════════════════════
 # Online diagnosis check per mode (post-hoc, from the REAL recorded

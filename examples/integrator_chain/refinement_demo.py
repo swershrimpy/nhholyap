@@ -12,10 +12,20 @@ Since refinement can only tighten reachable sets (never loosen them), the
 refined loss should never exceed the unrefined loss for a comparable horizon.
 
 Also reports JIT compile time vs. steady-state run time for the refined
-multistart optimization.
+multistart optimization, and appends a (N, compile_time, avg_run_time, ...)
+row to RUNTIME_CSV_PATH on every call so run time vs. state dimension N can
+be plotted afterwards.  Run time is measured timeit-style: RUN_TIME_REPEATS
+back-to-back calls are dispatched without blocking in between (so JAX can
+pipeline them on-device), then a single block_until_ready is issued at the
+end and the elapsed time is divided by the repeat count -- since a single
+call only takes ~1-2ms, blocking after every individual call would add a
+host/device sync round-trip to each measurement and dominate the signal
+with dispatch jitter.
 """
 
+import csv
 import sys
+import time
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -33,6 +43,35 @@ from integrator_separating_input import (
     refined_overlap_loss,
     time_jit,
 )
+
+RUNTIME_CSV_PATH = _HERE / "refinement_runtime_scaling.csv"
+RUN_TIME_REPEATS = 100
+
+
+def _timeit_run(jitted_fn, args, kwargs=None, num_repeats: int = RUN_TIME_REPEATS) -> float:
+    """Average steady-state run time (seconds/call) over num_repeats calls.
+
+    `jitted_fn` must already be compiled (i.e. this is not its first call)
+    so that no compilation cost leaks into the measurement.
+    """
+    kwargs = kwargs or {}
+    t0 = time.perf_counter()
+    out = None
+    for _ in range(num_repeats):
+        out = jitted_fn(*args, **kwargs)
+    jax.block_until_ready(out)
+    return (time.perf_counter() - t0) / num_repeats
+
+
+def _append_runtime_row(row: dict):
+    """Append one row to RUNTIME_CSV_PATH, writing the header on first write."""
+    is_new = not RUNTIME_CSV_PATH.exists()
+    with open(RUNTIME_CSV_PATH, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if is_new:
+            writer.writeheader()
+        writer.writerow(row)
+        f.flush()
 
 
 def run_for_order(N: int, num_restarts: int = 30, num_iters: int = 20, learning_rate: float = 0.15):
@@ -58,11 +97,18 @@ def run_for_order(N: int, num_restarts: int = 30, num_iters: int = 20, learning_
             num_restarts=num_restarts, learning_rate=learning_rate, num_iters=num_iters, seed=seed,
         )
 
-    _, compile_t, run_t, mem = time_jit(full_refined_multistart, 42)
-    print(f"\nrefined multistart: compile {compile_t * 1e3:8.2f} ms   run {run_t * 1e3:7.3f} ms"
+    jitted_refined_fn, compile_t, run_t_single, mem = time_jit(full_refined_multistart, 42)
+
+    # timeit-style average over RUN_TIME_REPEATS calls on the already-compiled
+    # function -- see module docstring for why this beats blocking per-call.
+    avg_run_t = _timeit_run(jitted_refined_fn, (42,))
+
+    print(f"\nrefined multistart: compile {compile_t * 1e3:8.2f} ms   "
+          f"run(1x) {run_t_single * 1e3:7.3f} ms   "
+          f"run(avg of {RUN_TIME_REPEATS}) {avg_run_t * 1e3:7.3f} ms"
           f"   ({num_restarts} restarts x {num_iters} iters)")
 
-    u_seq_refined, loss_refined, _, _ = full_refined_multistart(42)
+    u_seq_refined, loss_refined, _, _ = jitted_refined_fn(42)
     print(f"  refined best loss:   {float(loss_refined):.6f}")
 
     # ── Apples-to-apples comparison: refined loss for the UNREFINED optimum's
@@ -78,9 +124,30 @@ def run_for_order(N: int, num_restarts: int = 30, num_iters: int = 20, learning_
 
     print(f"\nMemory snapshot: {mem}")
 
+    # ── Persist (N, timings, ...) for a later runtime-vs-N plot ────────────
+    _append_runtime_row({
+        "N": N,
+        "compile_time_ms": compile_t * 1e3,
+        "run_time_single_ms": run_t_single * 1e3,
+        "run_time_avg_ms": avg_run_t * 1e3,
+        "run_time_repeats": RUN_TIME_REPEATS,
+        "num_restarts": num_restarts,
+        "num_iters": num_iters,
+        "num_steps": num_steps,
+        "unrefined_loss": loss_unrefined,
+        "refined_loss": float(loss_refined),
+    })
+    print(f"Appended runtime row to {RUNTIME_CSV_PATH}")
+
 
 if __name__ == "__main__":
     print("Devices:", jax.devices())
-    for N in range(2, 100):
+
+    # Start each sweep from a clean CSV so old rows (possibly from a
+    # different config) don't get mixed into the runtime-vs-N plot.
+    if RUNTIME_CSV_PATH.exists():
+        RUNTIME_CSV_PATH.unlink()
+
+    for N in range(2, 50):
         run_for_order(N)
-    print("\nDone.")
+    print(f"\nDone. Runtime-vs-N data written to {RUNTIME_CSV_PATH}")

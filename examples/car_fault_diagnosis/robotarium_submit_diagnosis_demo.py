@@ -210,6 +210,21 @@ N = 1
 initial_conditions = X0_CENTER.reshape(3, 1)
 r = robotarium.Robotarium(number_of_robots=N, show_figure=True,
                           initial_conditions=initial_conditions, sim_in_real_time=True)
+# The Robotarium hardware submission environment's rps build does not
+# expose `.axes` on the Robotarium object (AttributeError observed on
+# an actual submission run), even though show_figure=True still builds a
+# matplotlib figure internally (confirmed by that run's own
+# "FigureCanvasAgg is non-interactive" warning from its internal
+# plt.show() call) -- so locate the Axes defensively instead of
+# assuming an attribute name, falling all the way back to a standalone
+# figure if the Robotarium object exposes neither .axes nor .figure.
+ax = getattr(r, "axes", None)
+if ax is None:
+    _r_fig = getattr(r, "figure", None)
+    if _r_fig is not None and getattr(_r_fig, "axes", None):
+        ax = _r_fig.axes[0]
+if ax is None:
+    _, ax = plt.subplots()
 
 legend_handles = []
 for name in ("Nominal", "Actuator Fault", "Sensor Fault"):
@@ -219,10 +234,10 @@ for name in ("Nominal", "Actuator Fault", "Sensor Fault"):
         rect = patches.Rectangle((TUBE_LO[name][k, 0], TUBE_LO[name][k, 1]), w, h,
                                  facecolor=TUBE_COLOR[name], alpha=0.15,
                                  edgecolor=TUBE_COLOR[name], linewidth=0.8)
-        r.axes.add_patch(rect)
+        ax.add_patch(rect)
     legend_handles.append(patches.Patch(facecolor=TUBE_COLOR[name], alpha=0.3,
                                         edgecolor=TUBE_COLOR[name], label=name))
-r.axes.legend(handles=legend_handles, loc="upper left", fontsize=8)
+ax.legend(handles=legend_handles, loc="upper left", fontsize=8)
 
 # ══════════════════════════════════════════════════════════════════════════
 # Drive the real robot through U_OPT, holding each segment's command for
@@ -251,10 +266,10 @@ if TRUE_MODE == "Sensor Fault":
 else:
     observed_xy = measured_xy
 
-r.axes.plot(measured_xy[:, 0], measured_xy[:, 1], "k.-", linewidth=2,
+ax.plot(measured_xy[:, 0], measured_xy[:, 1], "k.-", linewidth=2,
            markersize=8, zorder=10)
 legend_handles.append(mlines.Line2D([0], [0], color="k", marker=".", label="Measured trajectory"))
-r.axes.legend(handles=legend_handles, loc="upper left", fontsize=8)
+ax.legend(handles=legend_handles, loc="upper left", fontsize=8)
 
 # ══════════════════════════════════════════════════════════════════════════
 # Online diagnosis check (post-hoc, from the REAL recorded trajectory): a

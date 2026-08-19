@@ -267,6 +267,72 @@ def optimize_refined_sequence_gpu(
     return best_u, best_loss, u_final, losses
 
 
+def optimize_refined_sequence_gpu_fused(
+    x0_ivl: irx.Interval,
+    scenarios: list,
+    dt: float,
+    num_steps: int = 5,
+    num_restarts: int = 50,
+    learning_rate: float = 0.05,
+    num_iters: int = 200,
+    seed: int = 42,
+    init_scale: float = 0.1,
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Same as optimize_refined_sequence_gpu but fuses batched_loss/
+    batched_grad into one jax.vmap(jax.value_and_grad(...)) call instead of
+    separate tracings (same fix as admire_separating_input.py's
+    optimize_multistep_gpu_fused / faulty_car_output_feedback_cbf.py's CBF
+    optimizer). propagate_with_refinement_admire itself was already
+    vmapped over scenarios/pairs (see its docstring), so this only fixes
+    the outer optimizer's redundant forward-graph tracing.
+
+    Caller should wrap this in an outer jax.jit before timing/deploying it.
+
+    `init_scale`: half-width of the uniform u0 sampling range (was
+    hardcoded to 0.1). _project_u's actual clip bound is +-0.5 rad; see
+    optimize_multistep_gpu_fused's init_scale docstring for why widening
+    this (this session's finding, mirroring faulty_car_output_feedback_cbf.py)
+    matters for letting GD actually move instead of stalling near a narrow
+    near-zero start.
+
+    IMPORTANT (see faulty_car_output_feedback_cbf.py's session history):
+    a refined loss of ~0 is a genuine diagnosability certificate ONLY if
+    checked against what the refinement mechanism actually computes; it is
+    NOT automatically the same as the raw (independent per-scenario) boxes
+    being disjoint. Always verify a low loss against raw per-segment
+    overlap (see this module's __main__ / multistep_refined_demo.py) before
+    trusting it, especially when init_scale/learning_rate/num_restarts are
+    pushed aggressively to hit a runtime budget.
+    """
+    key = jax.random.PRNGKey(seed)
+    u0  = jax.random.uniform(
+        key, (num_restarts, num_steps, 10), minval=-init_scale, maxval=init_scale
+    )
+
+    def loss_fn(u_seq):
+        return propagate_with_refinement_admire(
+            u_seq, x0_ivl=x0_ivl, scenarios=scenarios,
+            dt=dt, num_steps=num_steps,
+        )
+
+    batched_value_and_grad = jax.vmap(jax.value_and_grad(loss_fn))
+
+    def body(_, carry):
+        u_batch, _prev_losses = carry
+        losses, g = batched_value_and_grad(u_batch)
+        return (_project_u(u_batch - learning_rate * g), losses)
+
+    init_losses = jnp.zeros(num_restarts)
+    u_final, losses = jax.lax.fori_loop(0, num_iters, body, (u0, init_losses))
+    losses, _ = batched_value_and_grad(u_final)
+
+    losses_valid = jnp.where(jnp.isnan(losses), jnp.inf, losses)
+    best_idx  = jnp.argmin(losses_valid)
+    best_u    = u_final[best_idx]
+    best_loss = losses[best_idx]
+    return best_u, best_loss, u_final, losses
+
+
 # ── Example usage (run on GPU) ─────────────────────────────────────────────────
 if __name__ == "__main__":
     import numpy as np
