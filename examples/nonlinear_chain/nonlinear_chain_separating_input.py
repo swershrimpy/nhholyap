@@ -54,8 +54,10 @@ go2_separating_input_immrax.py / faulty_car_separating_input.py):
 
 Memory / performance notes (see PLAN.md §6 for the full discussion):
   - float32 throughout (JAX default); never enable x64.
-  - jax.checkpoint on every propagation loop body, including the refinement
-    loop.
+  - jax.checkpoint on propagation loop bodies that are emitted as a
+    jax.lax.scan; NOT on the Python-unrolled ones, where it wrapped the
+    whole chain rather than one step and cost ~1/3 of the runtime to save
+    kilobytes -- see _run_unrolled_or_loop's docstring.
   - flat-array (ivl_to_arr/arr_to_ivl) pytree carries in the refinement loop,
     not nested Interval structs, to minimize pytree-dispatch overhead.
   - _overlap_volume replaces overlap_size_lax's lax.cond with a branchless
@@ -130,13 +132,28 @@ def _overlap_volume(ivl1: irx.Interval, ivl2: irx.Interval) -> jnp.ndarray:
 
 def _run_unrolled_or_loop(step_fn, init, n: int, unroll_threshold: int = _UNROLL_THRESHOLD):
     """Apply step_fn (carry, i) -> carry exactly n times, starting from init.
-    Ported verbatim from integrator_separating_input.py."""
+
+    The unrolled branch deliberately does NOT wrap the chain in
+    jax.checkpoint (it used to, ported from integrator_separating_input.py).
+    That call wrapped the WHOLE n-step chain rather than one step, so under
+    jax.grad the program executed 3n step bodies -- n forward, n
+    rematerialised during the backward pass, n vjp -- where a plain unroll
+    executes 2n. What it bought was not storing the n intermediate carries,
+    and those are tiny: the refinement loop's carry is a few
+    (n_pairs, 2, 2N) float32 arrays, under a megabyte per step even at the
+    largest measured sweep point, against a measured *device* memory peak of
+    20-25MB on a 32GB V100 (the memory_kb column of refined_*_scaling.csv;
+    the multi-gigabyte peak_rss_mb column is host-side compiler memory,
+    which remat does not help). So the checkpoint was trading roughly a
+    third of the runtime for a memory saving four orders of magnitude away
+    from mattering.
+
+    The scan branch keeps its checkpoint: there the decorator sits on
+    scan_body, i.e. it is a genuine per-step remat, and n > unroll_threshold
+    is exactly the regime where storing every carry starts to add up.
+    """
     if n <= unroll_threshold:
-        def body(carry):
-            for i in range(n):
-                carry = step_fn(carry, i)
-            return carry
-        return jax.checkpoint(body)(init)
+        return _plain_unroll(step_fn, init, n)
     else:
         @jax.checkpoint
         def scan_body(carry, i):
