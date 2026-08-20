@@ -110,4 +110,4 @@ echo "  Started: $(date)"
 echo "================================================================"
 "${PY}" refined_horizon_scaling.py
 echo "Refined horizon sweep complete at $(date)"
-echo "CSV written to: ${EXAMPLE_DIR}/refined_horizon_scaling.csv"
+echo "CSV written to: ${EXAMPLE_DIR}/refined_horizon_scaling_v2.csv"

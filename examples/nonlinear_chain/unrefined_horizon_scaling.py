@@ -63,7 +63,7 @@ from runtime_scaling_common import (
 
 N = 10
 TOTAL_SCENARIOS = 7   # fixed scenario count (Ka=3, Ks=3 via split_fault_budget)
-CSV_PATH = _HERE / "unrefined_horizon_scaling.csv"
+CSV_PATH = _HERE / "unrefined_horizon_scaling_v2.csv"
 RUN_TIME_REPEATS = 100
 
 DT = 0.02

@@ -46,7 +46,7 @@ from runtime_scaling_common import (
 )
 
 N = 10
-CSV_PATH = _HERE / "unrefined_scenario_scaling.csv"
+CSV_PATH = _HERE / "unrefined_scenario_scaling_v2.csv"
 RUN_TIME_REPEATS = 100
 
 DT = 0.02
