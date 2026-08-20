@@ -86,6 +86,7 @@ from integrator_separating_input import (
     _invert_observation,
     _overlap_volume,
     _project_u,
+    _pair_indices,
     _run_unrolled_or_loop,
     _run_unrolled_or_loop_nocheckpoint,
     time_jit,
@@ -101,9 +102,18 @@ def propagate_with_refinement_stable(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     """Same as integrator_separating_input.propagate_with_refinement, with a
     double-`where` guard around `_invert_observation`'s input -- see module
     docstring for why. Only the per-pair step body differs from the
-    original; step 1 and the overall loop structure are unchanged."""
+    original; step 1 and the overall loop structure are unchanged.
+
+    The per-pair step body is vmapped over all C(n,2) pairs (_pair_indices,
+    imported from integrator_separating_input, which already got this same
+    fix) instead of a Python "for idx, (i, j) in enumerate(pairs):" loop --
+    see that module's propagate_with_refinement commit for the full
+    rationale. The double-`where` NaN guard is preserved exactly, just
+    computed per-pair inside the vmapped body instead of per-pair inside a
+    Python loop iteration -- pure array ops throughout, so it vmaps
+    unchanged."""
     n = len(scenarios)
-    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    pair_i, pair_j = _pair_indices(n)
     N = x0_ivl.lower.shape[0]
 
     def ivl_to_arr(ivl: irx.Interval) -> jnp.ndarray:
@@ -113,71 +123,101 @@ def propagate_with_refinement_stable(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
         return irx.Interval(lower=arr[:N], upper=arr[N:])
 
     emb_sys = scenarios[0].emb_system
-    p_batch = irx.Interval(
-        lower=jnp.stack([s.p_interval.lower for s in scenarios]),
-        upper=jnp.stack([s.p_interval.upper for s in scenarios]),
-    )
+    p_lo = jnp.stack([s.p_interval.lower for s in scenarios])
+    p_hi = jnp.stack([s.p_interval.upper for s in scenarios])
+    p_batch = irx.Interval(lower=p_lo, upper=p_hi)
     x1_batch = jax.vmap(lambda p: euler_step(emb_sys, x0_ivl, u_seq[0], p, dt))(p_batch)
     x1_ivls = [irx.Interval(lower=x1_batch.lower[i], upper=x1_batch.upper[i]) for i in range(n)]
     y1_ivls = [observed_output(x1, s) for x1, s in zip(x1_ivls, scenarios)]
-    step1_cost = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            step1_cost = step1_cost + _overlap_volume(y1_ivls[i], y1_ivls[j])
 
-    pxi_arr = jnp.stack([ivl_to_arr(x1_ivls[i]) for i, j in pairs])
-    pxj_arr = jnp.stack([ivl_to_arr(x1_ivls[j]) for i, j in pairs])
+    y1_lo = jnp.stack([iv.lower for iv in y1_ivls])
+    y1_hi = jnp.stack([iv.upper for iv in y1_ivls])
+    step1_cost = jnp.sum(jax.vmap(_overlap_volume)(
+        irx.Interval(lower=y1_lo[pair_i], upper=y1_hi[pair_i]),
+        irx.Interval(lower=y1_lo[pair_j], upper=y1_hi[pair_j]),
+    ))
+
+    pxi_arr = jnp.concatenate([x1_batch.lower[pair_i], x1_batch.upper[pair_i]], axis=-1)
+    pxj_arr = jnp.concatenate([x1_batch.lower[pair_j], x1_batch.upper[pair_j]], axis=-1)
+
+    beta_lo = jnp.stack([s.beta.lower for s in scenarios])
+    beta_hi = jnp.stack([s.beta.upper for s in scenarios])
+    xi_lo = jnp.stack([s.xi.lower for s in scenarios])
+    xi_hi = jnp.stack([s.xi.upper for s in scenarios])
+
+    def _gather(lo, hi, idx):
+        return irx.Interval(lower=lo[idx], upper=hi[idx])
+
+    beta_pi, beta_pj = _gather(beta_lo, beta_hi, pair_i), _gather(beta_lo, beta_hi, pair_j)
+    xi_pi, xi_pj = _gather(xi_lo, xi_hi, pair_i), _gather(xi_lo, xi_hi, pair_j)
+    p_pi, p_pj = _gather(p_lo, p_hi, pair_i), _gather(p_lo, p_hi, pair_j)
+
+    class _ScenLike:
+        """Minimal duck-typed stand-in for a Scenario, exposing only
+        .beta/.xi -- observed_output/_invert_observation only ever read
+        those two fields, so a per-pair-vmapped (beta, xi) slice can pass
+        through the SAME, already-correct functions unchanged."""
+        __slots__ = ("beta", "xi")
+
+        def __init__(self, beta, xi):
+            self.beta = beta
+            self.xi = xi
+
+    def step_one_pair(pxi_arr_1, pxj_arr_1, beta_i1, xi_i1, p_i1,
+                      beta_j1, xi_j1, p_j1, u_k):
+        x_curr_i = arr_to_ivl(pxi_arr_1)
+        x_curr_j = arr_to_ivl(pxj_arr_1)
+        scen_i = _ScenLike(beta_i1, xi_i1)
+        scen_j = _ScenLike(beta_j1, xi_j1)
+
+        y_i = observed_output(x_curr_i, scen_i)
+        y_j = observed_output(x_curr_j, scen_j)
+
+        y_lo = jnp.maximum(y_i.lower, y_j.lower)
+        y_hi = jnp.minimum(y_i.upper, y_j.upper)
+        has_overlap = jnp.all(y_hi >= y_lo)
+
+        # Double-`where` guard (see module docstring): feed
+        # _invert_observation a safe, bounded interval whenever
+        # has_overlap is False, so its (about-to-be-discarded) branch
+        # can't manufacture an inf/nan local gradient. When has_overlap
+        # is True this is exactly (y_lo, y_hi) -- no behavior change.
+        y_lo_safe = jnp.where(has_overlap, y_lo, jnp.zeros_like(y_lo))
+        y_hi_safe = jnp.where(has_overlap, y_hi, jnp.ones_like(y_hi))
+        y_int_safe = irx.Interval(lower=y_lo_safe, upper=y_hi_safe)
+
+        x_ref_i_overlap = _invert_observation(y_int_safe, scen_i)
+        x_ref_j_overlap = _invert_observation(y_int_safe, scen_j)
+
+        x_ref_i = irx.Interval(
+            lower=jnp.where(has_overlap, x_ref_i_overlap.lower, x_curr_i.lower),
+            upper=jnp.where(has_overlap, x_ref_i_overlap.upper, x_curr_i.upper),
+        )
+        x_ref_j = irx.Interval(
+            lower=jnp.where(has_overlap, x_ref_j_overlap.lower, x_curr_j.lower),
+            upper=jnp.where(has_overlap, x_ref_j_overlap.upper, x_curr_j.upper),
+        )
+
+        x_next_i = euler_step(emb_sys, x_ref_i, u_k, p_i1, dt)
+        x_next_j = euler_step(emb_sys, x_ref_j, u_k, p_j1, dt)
+
+        raw_cost = _overlap_volume(
+            observed_output(x_next_i, scen_i),
+            observed_output(x_next_j, scen_j),
+        )
+        pair_cost = jnp.where(has_overlap, raw_cost, jnp.array(0.0))
+        return ivl_to_arr(x_next_i), ivl_to_arr(x_next_j), pair_cost
+
+    step_all_pairs = jax.vmap(step_one_pair, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None))
 
     def step_body(carry, k):
         pxi_arr, pxj_arr, min_cost = carry
         u_k = u_seq[k + 1]
-        step_cost = jnp.array(0.0)
-        new_pxi, new_pxj = [], []
-
-        for idx, (i, j) in enumerate(pairs):
-            x_curr_i = arr_to_ivl(pxi_arr[idx])
-            x_curr_j = arr_to_ivl(pxj_arr[idx])
-
-            y_i = observed_output(x_curr_i, scenarios[i])
-            y_j = observed_output(x_curr_j, scenarios[j])
-
-            y_lo = jnp.maximum(y_i.lower, y_j.lower)
-            y_hi = jnp.minimum(y_i.upper, y_j.upper)
-            has_overlap = jnp.all(y_hi >= y_lo)
-
-            # Double-`where` guard (see module docstring): feed
-            # _invert_observation a safe, bounded interval whenever
-            # has_overlap is False, so its (about-to-be-discarded) branch
-            # can't manufacture an inf/nan local gradient. When has_overlap
-            # is True this is exactly (y_lo, y_hi) -- no behavior change.
-            y_lo_safe = jnp.where(has_overlap, y_lo, jnp.zeros_like(y_lo))
-            y_hi_safe = jnp.where(has_overlap, y_hi, jnp.ones_like(y_hi))
-            y_int_safe = irx.Interval(lower=y_lo_safe, upper=y_hi_safe)
-
-            x_ref_i_overlap = _invert_observation(y_int_safe, scenarios[i])
-            x_ref_j_overlap = _invert_observation(y_int_safe, scenarios[j])
-
-            x_ref_i = irx.Interval(
-                lower=jnp.where(has_overlap, x_ref_i_overlap.lower, x_curr_i.lower),
-                upper=jnp.where(has_overlap, x_ref_i_overlap.upper, x_curr_i.upper),
-            )
-            x_ref_j = irx.Interval(
-                lower=jnp.where(has_overlap, x_ref_j_overlap.lower, x_curr_j.lower),
-                upper=jnp.where(has_overlap, x_ref_j_overlap.upper, x_curr_j.upper),
-            )
-
-            x_next_i = euler_step(scenarios[i].emb_system, x_ref_i, u_k, scenarios[i].p_interval, dt)
-            x_next_j = euler_step(scenarios[j].emb_system, x_ref_j, u_k, scenarios[j].p_interval, dt)
-
-            raw_cost = _overlap_volume(
-                observed_output(x_next_i, scenarios[i]),
-                observed_output(x_next_j, scenarios[j]),
-            )
-            step_cost = step_cost + jnp.where(has_overlap, raw_cost, jnp.array(0.0))
-            new_pxi.append(ivl_to_arr(x_next_i))
-            new_pxj.append(ivl_to_arr(x_next_j))
-
-        return (jnp.stack(new_pxi), jnp.stack(new_pxj), jnp.minimum(min_cost, step_cost))
+        new_pxi, new_pxj, pair_costs = step_all_pairs(
+            pxi_arr, pxj_arr, beta_pi, xi_pi, p_pi, beta_pj, xi_pj, p_pj, u_k
+        )
+        step_cost = jnp.sum(pair_costs)
+        return (new_pxi, new_pxj, jnp.minimum(min_cost, step_cost))
 
     init_carry = (pxi_arr, pxj_arr, step1_cost)
     _, _, min_cost_final = _run_unrolled_or_loop(step_body, init_carry, num_steps - 1)
