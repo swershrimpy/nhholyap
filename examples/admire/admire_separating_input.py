@@ -64,6 +64,23 @@ _U_LO = jnp.ones(10) * -0.05
 _U_HI = jnp.ones(10) *  0.05
 
 
+def _pair_indices(n: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Static (i, j) index arrays for all C(n, 2) unordered pairs, i < j.
+
+    Used to turn a Python-level "for i: for j:" pairwise sum into a single
+    jax.vmap call: gather scenario i=0 and j's stacked data at these
+    indices, then vmap the per-pair function over the resulting (P, ...)
+    arrays. n is always a static Python int (len(scenarios)), so this list
+    comprehension runs once at trace time, not per call -- the returned
+    arrays are baked into the trace as constants, same as
+    admire_refined_sequence_optimizer.py's identical `pairs`/`pair_i`/
+    `pair_j` construction, which this mirrors so both the unrefined and
+    refined loss paths build their pair indices the same way.
+    """
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    return jnp.array([i for i, j in pairs]), jnp.array([j for i, j in pairs])
+
+
 def _project_u(u: jnp.ndarray) -> jnp.ndarray:
     """Project a control input (or batch) onto the feasible box.
 
@@ -251,11 +268,17 @@ def separation_loss(u: jnp.ndarray,
         for s in scenarios
     ]
     n = len(out_ivls)
-    total = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            total = total + overlap_size_log(out_ivls[i], out_ivls[j])
-    return total
+    # vmap over all C(n,2) pairs at once instead of a Python "for i: for j:"
+    # double loop -- see _pair_indices' docstring. Same math (sum of
+    # overlap_size_log over every unordered pair), verified equal
+    # (value, JIT, and gradient) against the loop version before this
+    # change shipped.
+    lo_stack = jnp.stack([iv.lower for iv in out_ivls])  # (n, 3)
+    hi_stack = jnp.stack([iv.upper for iv in out_ivls])  # (n, 3)
+    pair_i, pair_j = _pair_indices(n)
+    ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])  # (P, 3)
+    ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])  # (P, 3)
+    return jnp.sum(jax.vmap(overlap_size_log)(ivl_i, ivl_j))
 
 
 def separation_loss_multistep(u_seq: jnp.ndarray,
@@ -321,21 +344,22 @@ def separation_loss_multistep(u_seq: jnp.ndarray,
             )
 
     # ── Overlap sum at each segment end, then take the minimum ───────────
-    def overlap_at_k(k):
-        out_ivls_k = [
-            irx.Interval(
-                lower=x_hist_all[i].lower[k, 3:6],
-                upper=x_hist_all[i].upper[k, 3:6],
-            )
-            for i in range(n)
-        ]
-        total = jnp.array(0.0)
-        for i in range(n):
-            for j in range(i + 1, n):
-                total = total + overlap_size_log(out_ivls_k[i], out_ivls_k[j])
-        return total
-
-    segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
+    # Double vmap over (pairs, segments) instead of a Python "for i: for j:"
+    # loop repeated once per segment (n_pairs x num_segments unrolled calls
+    # previously) -- see _pair_indices' docstring. Same math, verified equal
+    # (value, JIT, and gradient) against the loop version before this
+    # change shipped. This was the dominant cost that made this "unrefined"
+    # path slower in practice than admire_refined_sequence_optimizer.py's
+    # propagate_with_refinement_admire, despite doing conceptually less
+    # work per step (no refinement) -- that module already vmaps its own
+    # pairwise computation for exactly this reason (see its docstring).
+    lo_stack = jnp.stack([x_hist_all[i].lower[:, 3:6] for i in range(n)])  # (n, num_segments, 3)
+    hi_stack = jnp.stack([x_hist_all[i].upper[:, 3:6] for i in range(n)])  # (n, num_segments, 3)
+    pair_i, pair_j = _pair_indices(n)
+    ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])  # (P, num_segments, 3)
+    ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])  # (P, num_segments, 3)
+    pairwise_at_segment = jax.vmap(jax.vmap(overlap_size_log))(ivl_i, ivl_j)  # (P, num_segments)
+    segment_overlaps = jnp.sum(pairwise_at_segment, axis=0)  # (num_segments,)
     return jnp.min(segment_overlaps)
 
 

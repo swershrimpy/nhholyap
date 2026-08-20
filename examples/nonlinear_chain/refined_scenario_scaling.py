@@ -27,6 +27,7 @@ for the measured numbers that motivated this design).
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -53,12 +54,14 @@ NUM_ITERS = 15
 LEARNING_RATE = 0.1
 
 # Per-point subprocess guard rails -- see run_worker_with_limits and
-# unrefined_scenario_scaling.py's docstring for the incident that motivated
-# these (a single unguarded N=10/21-scenario point reached >7.7GB RSS and
-# climbing before being killed by hand, ~10 minutes in, nearly freezing the
-# host). Same bounds as the unrefined sweep for an apples-to-apples CSV.
-WORKER_TIMEOUT_S = 150.0
-WORKER_MEM_LIMIT_MB = 4096.0
+# unrefined_scenario_scaling.py's docstring for the incident that originally
+# motivated bounded values here. No self-imposed timeout/RSS cap anymore:
+# every point runs to completion however long that takes, and only the real
+# OS/cgroup OOM killer can still end a point early (recorded as an 'error'
+# row) -- each completed point's CSV row is flushed immediately, so a later
+# point's failure never loses earlier results.
+WORKER_TIMEOUT_S = math.inf
+WORKER_MEM_LIMIT_MB = math.inf
 
 CSV_FIELDS = [
     "num_scenarios", "N", "status", "elapsed_s", "peak_rss_mb",

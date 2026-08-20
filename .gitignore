@@ -8,3 +8,9 @@
 *.pkl
 *.csv
 *.mp4
+/envs/
+/logs/
+/pip_install.log
+/.cache/
+/.scratch_verify/
+.stale_csv_backup/

@@ -45,7 +45,7 @@ _COLOR_REFINED = "#eb6834"     # slot 2 (orange)
 
 plt.rcParams.update({
     'font.family': 'serif',
-    'font.serif': ['Computer Modern'],
+    'font.serif': ['Times New Roman', 'Liberation Serif'],
     'text.usetex': False,
 })
 

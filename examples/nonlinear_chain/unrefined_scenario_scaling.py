@@ -29,6 +29,7 @@ and plot_scenario_runtime_scaling.py for the companion plot over both CSVs.
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -56,12 +57,14 @@ NUM_ITERS = 15
 LEARNING_RATE = 0.1
 
 # Per-point subprocess guard rails -- see run_worker_with_limits and this
-# module's docstring. A single unguarded point at N=10/21-scenarios was
-# observed to reach >7.7GB RSS and climbing after ~10 minutes before being
-# killed by hand, nearly freezing the host; these bounds are set well below
-# that so a runaway point is caught early and recorded as a failure instead.
-WORKER_TIMEOUT_S = 150.0
-WORKER_MEM_LIMIT_MB = 4096.0
+# module's docstring. No self-imposed timeout/RSS cap: every point is left
+# to run to completion, however long that takes, and the only thing that
+# can still end a point early is the real OS/cgroup OOM killer (in which
+# case the point is recorded as an 'error' row) -- each completed point's
+# CSV row is flushed immediately, so a later point's failure never loses
+# earlier results.
+WORKER_TIMEOUT_S = math.inf
+WORKER_MEM_LIMIT_MB = math.inf
 
 # Every CSV row (success or failure) has exactly these keys, in this order,
 # so csv.DictWriter's fieldnames stay consistent regardless of which totals

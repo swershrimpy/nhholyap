@@ -74,17 +74,21 @@ plt.rcParams.update({
 _ORDER_RE = re.compile(r"order N=(\d+)")
 _TIMING_RE = re.compile(r"refined multistart: compile\s+([\d.]+) ms\s+run\s+([\d.]+) ms")
 _PEAK_MEM_RE = re.compile(r"'peak_bytes_in_use': ([\d.eE+-]+)")
+_HOST_RSS_RE = re.compile(r"'host_peak_rss_bytes': ([\d.eE+-]+)")
 
 
 def parse_log(log_path: Path):
-    """Returns list of (N, compile_time_ms, run_time_ms, peak_gpu_mem_bytes),
-    sorted by N.
+    """Returns list of (N, compile_time_ms, run_time_ms, peak_gpu_mem_bytes,
+    peak_host_rss_bytes), sorted by N.
 
     The memory snapshot is printed a few lines AFTER the timing line for the
     same order, so `current_n` is only cleared once both have been seen.
     peak_gpu_mem_bytes is None for an order whose snapshot is missing or
     reports CPU RSS instead of device stats (time_jit's fallback when no GPU
     is present -- that log has no 'peak_bytes_in_use' key at all).
+    peak_host_rss_bytes is None for logs predating the host-RAM
+    instrumentation (no 'host_peak_rss_bytes' key at all) -- the already-
+    committed log parses fine and just yields an empty column.
     """
     rows = []
     current_n = None
@@ -105,7 +109,9 @@ def parse_log(log_path: Path):
             if "Memory snapshot" in line and timing is not None:
                 m_mem = _PEAK_MEM_RE.search(line)
                 peak = float(m_mem.group(1)) if m_mem else None
-                rows.append((current_n, timing[0], timing[1], peak))
+                m_host = _HOST_RSS_RE.search(line)
+                host_peak = float(m_host.group(1)) if m_host else None
+                rows.append((current_n, timing[0], timing[1], peak, host_peak))
                 current_n = None   # each N contributes exactly one such pair
                 timing = None
     rows.sort(key=lambda r: r[0])
@@ -115,9 +121,11 @@ def parse_log(log_path: Path):
 def write_csv(rows, out_csv: Path):
     with open(out_csv, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["N", "compile_time_ms", "run_time_ms", "peak_gpu_mem_bytes"])
+        writer.writerow(["N", "compile_time_ms", "run_time_ms", "peak_gpu_mem_bytes",
+                          "peak_host_rss_bytes"])
         writer.writerows(
-            (n, c, r, "" if m is None else f"{m:.0f}") for n, c, r, m in rows
+            (n, c, r, "" if m is None else f"{m:.0f}", "" if h is None else f"{h:.0f}")
+            for n, c, r, m, h in rows
         )
 
 
@@ -159,8 +167,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     write_csv(rows, OUT_CSV)
-    print(f"Parsed {len(rows)} (N, compile_time_ms, run_time_ms, peak_gpu_mem_bytes) "
-          f"rows from {log_path}")
+    print(f"Parsed {len(rows)} (N, compile_time_ms, run_time_ms, peak_gpu_mem_bytes, "
+          f"peak_host_rss_bytes) rows from {log_path}")
     print(f"Wrote CSV -> {OUT_CSV}")
 
     Ns_found = [r[0] for r in rows]
@@ -173,7 +181,7 @@ if __name__ == "__main__":
     # docstring): it equals order N's own peak only at orders that set a new
     # record. Report any flat/censored points rather than silently treating
     # an upper bound as a measurement.
-    mem_rows = [(n, m) for n, _, _, m in rows if m is not None]
+    mem_rows = [(n, m) for n, _, _, m, _ in rows if m is not None]
     if not mem_rows:
         print("No peak_bytes_in_use in this log (CPU-only run?) -- no memory column.")
     else:
@@ -191,6 +199,20 @@ if __name__ == "__main__":
                   file=sys.stderr)
         else:
             print("Every order set a new peak -> each memory value is that order's own peak.")
+
+    # host_peak_rss_bytes is reset per order (see integrator_separating_input's
+    # _HostPeakRSS), so unlike the GPU series above, a flat or falling stretch
+    # here is a real measurement, not a censored upper bound -- no running-max
+    # warning applies to this series.
+    host_rows = [(n, h) for n, _, _, _, h in rows if h is not None]
+    if not host_rows:
+        print("No host_peak_rss_bytes in this log (predates host-RAM instrumentation) "
+              "-- no host RAM column.")
+    else:
+        print(f"Peak host RSS: {host_rows[0][1] / 1e6:.3f} MB at N={host_rows[0][0]} "
+              f"-> {host_rows[-1][1] / 1e6:.3f} MB at N={host_rows[-1][0]} "
+              f"(min {min(h for _, h in host_rows) / 1e6:.3f} MB, "
+              f"max {max(h for _, h in host_rows) / 1e6:.3f} MB)")
 
     pdf_path = make_plot(rows)
     print(f"Wrote plot: {pdf_path}")

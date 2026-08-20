@@ -43,6 +43,16 @@ _U_LO = jnp.array([-.6, -.6, -.6])
 _U_HI = jnp.array([ .6,  .6,  .6])
 
 
+def _pair_indices(n: int):
+    """Static (i, j) index arrays for all C(n, 2) unordered pairs, i < j.
+    See admire/nonlinear_chain/integrator_chain/car_fault_diagnosis/
+    quadrotor_fault_diagnosis/faulty_car/faulty_multirotor's identical
+    helper for the full rationale (this module is the one they were
+    ported from)."""
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    return jnp.array([i for i, j in pairs]), jnp.array([j for i, j in pairs])
+
+
 def _project_u(u: jnp.ndarray) -> jnp.ndarray:
     """Project a control input (or batch) onto the feasible box.
 
@@ -321,11 +331,12 @@ def separation_loss(u: jnp.ndarray,
         for s in scenarios
     ]
     n = len(pos_ivls)
-    total = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            total = total + overlap_size_lax(pos_ivls[i], pos_ivls[j])
-    return total
+    lo_stack = jnp.stack([iv.lower for iv in pos_ivls])
+    hi_stack = jnp.stack([iv.upper for iv in pos_ivls])
+    pair_i, pair_j = _pair_indices(n)
+    ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+    ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+    return jnp.sum(jax.vmap(overlap_size_lax)(ivl_i, ivl_j))
 
 
 def separation_loss_multistep(u_seq: jnp.ndarray,
@@ -393,6 +404,8 @@ def separation_loss_multistep(u_seq: jnp.ndarray,
             )
 
     # ── Overlap sum at each segment end, then take the minimum ───────────
+    pair_i, pair_j = _pair_indices(n)
+
     def overlap_at_k(k):
         pos_ivls_k = [
             irx.Interval(
@@ -401,11 +414,11 @@ def separation_loss_multistep(u_seq: jnp.ndarray,
             )
             for i in range(n)
         ]
-        total = jnp.array(0.0)
-        for i in range(n):
-            for j in range(i + 1, n):
-                total = total + overlap_size_lax(pos_ivls_k[i], pos_ivls_k[j])
-        return total
+        lo_stack = jnp.stack([iv.lower for iv in pos_ivls_k])
+        hi_stack = jnp.stack([iv.upper for iv in pos_ivls_k])
+        ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+        ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+        return jnp.sum(jax.vmap(overlap_size_lax)(ivl_i, ivl_j))
 
     segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
     return jnp.min(segment_overlaps)
@@ -959,6 +972,8 @@ def separation_loss_cbf_multistep(
             )
 
     # ── Separation loss  (min over segments of pairwise overlap sum) ─────
+    pair_i, pair_j = _pair_indices(n)
+
     def overlap_at_k(k):
         pos_ivls_k = [
             irx.Interval(
@@ -967,11 +982,11 @@ def separation_loss_cbf_multistep(
             )
             for i in range(n)
         ]
-        total = jnp.array(0.0)
-        for i in range(n):
-            for j in range(i + 1, n):
-                total = total + overlap_size_lax(pos_ivls_k[i], pos_ivls_k[j])
-        return total
+        lo_stack = jnp.stack([iv.lower for iv in pos_ivls_k])
+        hi_stack = jnp.stack([iv.upper for iv in pos_ivls_k])
+        ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+        ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+        return jnp.sum(jax.vmap(overlap_size_lax)(ivl_i, ivl_j))
 
     segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
     overlap_loss = jnp.min(segment_overlaps)
@@ -979,17 +994,17 @@ def separation_loss_cbf_multistep(
     # ── CBF penalty  (sum over all segments and scenarios) ───────────────
     # For each position interval P_i^k we compute h_min = min_{p ∈ P_i^k} h(p)
     # (worst-case proximity to the obstacle), then penalise any negative value
-    # with relu(−h_min).  Summing over all (k, i) pairs ensures the trajectory
-    # of every scenario stays clear of the obstacle at every segment boundary.
-    cbf_total = jnp.array(0.0)
-    for k in range(num_segments):
-        for i in range(n):
-            pos_ivl_ki = irx.Interval(
-                lower=x_hist_all[i].lower[k, :2],
-                upper=x_hist_all[i].upper[k, :2],
-            )
-            h_min = obstacle_cbf_value(pos_ivl_ki, obs_center, obs_radius)
-            cbf_total = cbf_total + jnp.maximum(jnp.array(0.0), -h_min)
+    # with relu(−h_min). Vmapped over (scenario, segment) at once instead of
+    # a Python "for k: for i:" double loop -- x_hist_all[i] already has
+    # shape (num_segments, state_dim) per scenario, so stacking over
+    # scenarios gives a (n, num_segments, 2) position array to vmap over
+    # both axes together.
+    pos_lo_all = jnp.stack([x_hist_all[i].lower[:, :2] for i in range(n)])  # (n, num_segments, 2)
+    pos_hi_all = jnp.stack([x_hist_all[i].upper[:, :2] for i in range(n)])
+    h_min_all = jax.vmap(jax.vmap(
+        lambda lo, hi: obstacle_cbf_value(irx.Interval(lower=lo, upper=hi), obs_center, obs_radius)
+    ))(pos_lo_all, pos_hi_all)  # (n, num_segments)
+    cbf_total = jnp.sum(jnp.maximum(jnp.array(0.0), -h_min_all))
 
     return overlap_loss + cbf_lambda * cbf_total
 

@@ -85,8 +85,10 @@ Memory / performance notes (see project plan for the full estimate):
     is not.
 """
 
+import os
 import sys
 import time
+import threading
 import resource
 from pathlib import Path
 from dataclasses import dataclass
@@ -211,15 +213,82 @@ def _plain_unroll(step_fn, init, n: int):
 # 0.  Timing / Memory Helper
 # ══════════════════════════════════════════════════════════════════════════════
 
+class _HostPeakRSS:
+    """Per-order peak host RSS, sampled in a background thread.
+
+    Reads field 2 (resident pages) of /proc/self/statm, which is cheaper than
+    parsing /proc/self/status. Unlike ru_maxrss / VmHWM this peak is
+    resettable, so it answers "how much host RAM did THIS order need" rather
+    than "how much has the process ever touched".
+
+    Linux-only, which is all PACE and the dev boxes are. On a platform without
+    /proc, peak_bytes() returns 0.0 and the caller records an empty column
+    rather than crashing.
+    """
+
+    def __init__(self, interval_s: float = 0.1):
+        self._interval_s = interval_s
+        self._peak = 0
+        self._lock = threading.Lock()
+        self._page = os.sysconf("SC_PAGE_SIZE")
+        self._started = False
+
+    def _rss_bytes(self) -> int:
+        try:
+            with open("/proc/self/statm") as f:
+                return int(f.read().split()[1]) * self._page
+        except Exception:
+            return 0
+
+    def _poll_forever(self):
+        while True:
+            rss = self._rss_bytes()
+            with self._lock:
+                if rss > self._peak:
+                    self._peak = rss
+            time.sleep(self._interval_s)
+
+    def start(self):
+        """Idempotent -- safe to call more than once."""
+        if self._started:
+            return
+        self._started = True
+        threading.Thread(target=self._poll_forever, daemon=True).start()
+
+    def reset(self):
+        """Drop the running peak to the CURRENT RSS. Call at the top of each order."""
+        cur = self._rss_bytes()
+        with self._lock:
+            self._peak = cur
+
+    def peak_bytes(self) -> float:
+        with self._lock:
+            return float(self._peak)
+
+
+HOST_PEAK_RSS = _HostPeakRSS()
+
+
 def _memory_snapshot() -> Dict[str, float]:
-    """Best-effort memory snapshot: GPU device stats if available, else CPU RSS."""
+    """Best-effort memory snapshot: device stats AND host RSS -- both, always.
+
+    Device keys keep their exact upstream names so existing log parsers and
+    already-collected logs stay valid; host keys are added alongside.
+    """
+    snap: Dict[str, float] = {}
     try:
         stats = jax.devices()[0].memory_stats()
         if stats:
-            return {k: float(v) for k, v in stats.items() if 'bytes' in k}
+            snap.update({k: float(v) for k, v in stats.items() if 'bytes' in k})
     except Exception:
         pass
-    return {'ru_maxrss_kb': float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)}
+    snap['host_peak_rss_bytes'] = HOST_PEAK_RSS.peak_bytes()
+    # ru_maxrss is KiB on Linux; kept as the monotone process-lifetime
+    # reference, used only to cross-check the final value against Slurm's
+    # job-level `mem=` figure. It is NOT the per-order series.
+    snap['host_ru_maxrss_bytes'] = float(
+        resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024.0
+    return snap
 
 
 def time_jit(fn, *args, **kwargs):
