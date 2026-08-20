@@ -42,7 +42,7 @@
 #     <repo>/envs/immrax/bin/python -m pip install "immrax[cuda]" pytest
 #
 # Override directives on the CLI (CLI flags beat #SBATCH lines):
-#   sbatch -A gts-scoogan3 --time=1-00:00:00 run_refinement_scaling.sbatch
+#   sbatch -A gts-scoogan3-fy20phase3 --time=1-00:00:00 run_refinement_scaling.sbatch
 #
 # Env-var config (optional): CONDA_ENV=<repo>/envs/immrax
 # =============================================================================
