@@ -58,8 +58,10 @@ Memory / performance notes (see PLAN.md §6 for the full discussion):
     jax.lax.scan; NOT on the Python-unrolled ones, where it wrapped the
     whole chain rather than one step and cost ~1/3 of the runtime to save
     kilobytes -- see _run_unrolled_or_loop's docstring.
-  - flat-array (ivl_to_arr/arr_to_ivl) pytree carries in the refinement loop,
-    not nested Interval structs, to minimize pytree-dispatch overhead.
+  - flat upper-triangular (ut) pytree carries in the refinement loop, not
+    nested Interval structs, to minimize pytree-dispatch overhead -- and,
+    since immrax's embedding consumes and returns ut vectors anyway, to
+    avoid splitting and re-concatenating them around every Euler step.
   - _overlap_volume replaces overlap_size_lax's lax.cond with a branchless
     clipped-product formula.
   - Scenario propagation is vmapped across scenarios (all scenarios share one
@@ -298,7 +300,14 @@ def observed_output(x_ivl: irx.Interval, scenario: Scenario) -> irx.Interval:
 
 def _invert_observation(y_ivl: irx.Interval, scenario: Scenario) -> irx.Interval:
     """Outer-enclose x from y = beta*x + xi, given uncertain beta (>0) and xi.
-    Ported verbatim from integrator_separating_input.py."""
+    Ported verbatim from integrator_separating_input.py.
+
+    Reference implementation. propagate_with_refinement no longer calls this
+    -- it inlines the same four-corner enclosure on pair-stacked ut vectors,
+    to do both members of a pair in one go (see its docstring) -- so the two
+    must agree; tests/test_nonlinear_chain_separating_input.py checks this
+    one directly and the inlined one against it.
+    """
     beta, xi = scenario.beta, scenario.xi
     v_lower = y_ivl.lower - xi.upper
     v_upper = y_ivl.upper - xi.lower
@@ -793,23 +802,36 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     Ported from integrator_separating_input.py -- see that module's docstring
     for the full algorithm description; unchanged here beyond N/scenario-count.
 
-    The per-pair step body is vmapped over all C(n,2) pairs (see
-    _pair_indices' docstring) rather than a Python "for idx, (i, j) in
-    enumerate(pairs):" loop -- previously unrolled into n_pairs separate
-    unfused ops PER propagation step (n_pairs x (num_steps-1) calls total),
-    the same anti-pattern separation_loss_multistep had. All scenarios
-    share one emb_system (already used unbatched in Step 1 below), so only
-    the per-scenario beta/xi/p_interval need to be pair-gathered.
+    Layout: every loop-carried array below has a leading ``(P, 2)`` axis pair
+    -- P = C(n,2) scenario pairs from _pair_indices (see its docstring), then
+    the two members of each pair (0 = the lower-indexed scenario i, 1 = j) --
+    and each lane is a 2N-vector in upper-triangular (ut) coordinates,
+    ``concatenate([lower, upper])``.
+
+    Three consequences of that layout, all aimed at kernel-launch count
+    rather than FLOPs -- a step touches a couple of kilobytes at the sweep
+    scripts' batch sizes, so wall time is launch-bound, not arithmetic-bound:
+
+      * The pair's two members go through ONE call each to euler_step_ut, the
+        observation map and the observation inverse, instead of the
+        mirror-image i-side and j-side calls the previous per-pair body made.
+        Every Euler step is an emb_sys.f, and that evaluates the natural
+        inclusion function on all 2N faces of the hyperrectangle (see
+        immrax's InclusionEmbedding.E), so halving how many of them the graph
+        contains is the largest single op-count saving available here.
+      * The carry stays in ut form end to end. The old body unpacked the
+        carry to an Interval, re-packed it to ut inside euler_step, split it
+        again on the way out and re-concatenated it for the carry: four
+        layout round trips per pair-member per step, carrying no arithmetic.
+      * The observed output is carried alongside the state instead of being
+        recomputed. The old body computed observed_output(x_next) for the
+        step cost, and the next step then recomputed exactly that value as
+        observed_output(x_curr); XLA cannot CSE it away across the loop
+        boundary.
     """
     n = len(scenarios)
     pair_i, pair_j = _pair_indices(n)
     N = x0_ivl.lower.shape[0]
-
-    def ivl_to_arr(ivl: irx.Interval) -> jnp.ndarray:
-        return jnp.concatenate([ivl.lower, ivl.upper])
-
-    def arr_to_ivl(arr: jnp.ndarray) -> irx.Interval:
-        return irx.Interval(lower=arr[:N], upper=arr[N:])
 
     # ── Step 1: propagate all scenarios one Euler step with u_seq[0] ──────
     emb_sys = scenarios[0].emb_system
@@ -817,97 +839,98 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     p_hi = jnp.stack([s.p_interval.upper for s in scenarios])
     p_batch = irx.Interval(lower=p_lo, upper=p_hi)
     x1_batch = jax.vmap(lambda p: euler_step(emb_sys, x0_ivl, u_seq[0], p, dt))(p_batch)
-    x1_ivls = [irx.Interval(lower=x1_batch.lower[i], upper=x1_batch.upper[i]) for i in range(n)]
-    y1_ivls = [observed_output(x1, s) for x1, s in zip(x1_ivls, scenarios)]
 
-    y1_lo = jnp.stack([iv.lower for iv in y1_ivls])
-    y1_hi = jnp.stack([iv.upper for iv in y1_ivls])
-    step1_cost = jnp.sum(jax.vmap(_overlap_volume)(
-        irx.Interval(lower=y1_lo[pair_i], upper=y1_hi[pair_i]),
-        irx.Interval(lower=y1_lo[pair_j], upper=y1_hi[pair_j]),
-    ))
-
-    # (P, 2N) carries, gathered by pair index instead of a Python per-pair
-    # ivl_to_arr + stack loop.
-    pxi_arr = jnp.concatenate([x1_batch.lower[pair_i], x1_batch.upper[pair_i]], axis=-1)
-    pxj_arr = jnp.concatenate([x1_batch.lower[pair_j], x1_batch.upper[pair_j]], axis=-1)
-
-    # Per-pair beta/xi (for observed_output/_invert_observation) and
-    # p_interval (for euler_step), pre-gathered once outside the scan --
-    # emb_sys itself is shared, so it stays an unbatched closure variable.
     beta_lo = jnp.stack([s.beta.lower for s in scenarios])
     beta_hi = jnp.stack([s.beta.upper for s in scenarios])
     xi_lo = jnp.stack([s.xi.lower for s in scenarios])
     xi_hi = jnp.stack([s.xi.upper for s in scenarios])
 
-    def _gather(lo, hi, idx):
-        return irx.Interval(lower=lo[idx], upper=hi[idx])
+    # observed_output, batched over the scenario axis rather than called once
+    # per scenario (create_scenarios enforces beta > 0, so lower pairs with
+    # lower and upper with upper -- exactly what observed_output does).
+    y1_lo = beta_lo * x1_batch.lower + xi_lo
+    y1_hi = beta_hi * x1_batch.upper + xi_hi
+    step1_cost = jnp.sum(jax.vmap(_overlap_volume)(
+        irx.Interval(lower=y1_lo[pair_i], upper=y1_hi[pair_i]),
+        irx.Interval(lower=y1_lo[pair_j], upper=y1_hi[pair_j]),
+    ))
 
-    beta_pi, beta_pj = _gather(beta_lo, beta_hi, pair_i), _gather(beta_lo, beta_hi, pair_j)
-    xi_pi, xi_pj = _gather(xi_lo, xi_hi, pair_i), _gather(xi_lo, xi_hi, pair_j)
-    p_pi, p_pj = _gather(p_lo, p_hi, pair_i), _gather(p_lo, p_hi, pair_j)
+    def _pair_stack(arr: jnp.ndarray) -> jnp.ndarray:
+        """(n, ...) per scenario -> (P, 2, ...) per pair member."""
+        return jnp.stack([arr[pair_i], arr[pair_j]], axis=1)
 
-    class _ScenLike:
-        """Minimal duck-typed stand-in for a Scenario, exposing only
-        .beta/.xi -- observed_output/_invert_observation only ever read
-        those two fields, so a per-pair-vmapped (beta, xi) slice can pass
-        through the SAME, already-correct functions unchanged instead of
-        re-deriving their math inline for the batched case."""
-        __slots__ = ("beta", "xi")
+    def _ut(lower: jnp.ndarray, upper: jnp.ndarray) -> jnp.ndarray:
+        return jnp.concatenate([lower, upper], axis=-1)
 
-        def __init__(self, beta, xi):
-            self.beta = beta
-            self.xi = xi
+    beta_ut = _pair_stack(_ut(beta_lo, beta_hi))            # (P, 2, 2N)
+    xi_ut = _pair_stack(_ut(xi_lo, xi_hi))                  # (P, 2, 2N)
+    # Half-swapped copies of the same constants. The observation inverse
+    # pairs y.lower with xi.upper, and divides each v endpoint by BOTH beta
+    # endpoints -- i.e. it crosses the two halves of a ut vector. Swapping
+    # the halves of the constants once, here (they are loop-invariant), turns
+    # those cross-half pairings into plain elementwise ut ops inside the loop.
+    beta_ut_swap = _pair_stack(_ut(beta_hi, beta_lo))       # (P, 2, 2N)
+    xi_ut_swap = _pair_stack(_ut(xi_hi, xi_lo))             # (P, 2, 2N)
+    p_pair = irx.Interval(lower=_pair_stack(p_lo),
+                          upper=_pair_stack(p_hi))          # (P, 2, N)
 
-    def step_one_pair(pxi_arr_1, pxj_arr_1, beta_i1, xi_i1, p_i1,
-                      beta_j1, xi_j1, p_j1, u_k):
-        x_curr_i = arr_to_ivl(pxi_arr_1)
-        x_curr_j = arr_to_ivl(pxj_arr_1)
-        scen_i = _ScenLike(beta_i1, xi_i1)
-        scen_j = _ScenLike(beta_j1, xi_j1)
+    x_ut0 = _pair_stack(_ut(x1_batch.lower, x1_batch.upper))  # (P, 2, 2N)
+    y_ut0 = beta_ut * x_ut0 + xi_ut                           # (P, 2, 2N)
 
-        y_i = observed_output(x_curr_i, scen_i)
-        y_j = observed_output(x_curr_j, scen_j)
+    # True over a ut vector's `lower` half, False over its `upper` half. Lets
+    # the pairwise intersection (max on the lowers, min on the uppers) run as
+    # one elementwise where, instead of slicing the halves apart and
+    # concatenating the two results back together. numpy, not jnp, so it is a
+    # baked-in constant rather than a traced iota + compare.
+    lo_half = np.arange(2 * N) < N
 
-        y_lo = jnp.maximum(y_i.lower, y_j.lower)
-        y_hi = jnp.minimum(y_i.upper, y_j.upper)
-        has_overlap = jnp.all(y_hi >= y_lo)
-        y_int = irx.Interval(lower=y_lo, upper=y_hi)
-
-        x_ref_i_overlap = _invert_observation(y_int, scen_i)
-        x_ref_j_overlap = _invert_observation(y_int, scen_j)
-
-        x_ref_i = irx.Interval(
-            lower=jnp.where(has_overlap, x_ref_i_overlap.lower, x_curr_i.lower),
-            upper=jnp.where(has_overlap, x_ref_i_overlap.upper, x_curr_i.upper),
-        )
-        x_ref_j = irx.Interval(
-            lower=jnp.where(has_overlap, x_ref_j_overlap.lower, x_curr_j.lower),
-            upper=jnp.where(has_overlap, x_ref_j_overlap.upper, x_curr_j.upper),
-        )
-
-        x_next_i = euler_step(emb_sys, x_ref_i, u_k, p_i1, dt)
-        x_next_j = euler_step(emb_sys, x_ref_j, u_k, p_j1, dt)
-
-        raw_cost = _overlap_volume(
-            observed_output(x_next_i, scen_i),
-            observed_output(x_next_j, scen_j),
-        )
-        pair_cost = jnp.where(has_overlap, raw_cost, jnp.array(0.0))
-        return ivl_to_arr(x_next_i), ivl_to_arr(x_next_j), pair_cost
-
-    step_all_pairs = jax.vmap(step_one_pair, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None))
+    # One Euler step for every (pair, member) lane at once. emb_sys.f wants a
+    # single (2N,) ut vector per lane, hence the two vmaps; u_k is shared
+    # across all lanes, as is emb_sys (closed over, unbatched).
+    step_all = jax.vmap(
+        jax.vmap(lambda xu, p, u: euler_step_ut(emb_sys, xu, u, p, dt),
+                 in_axes=(0, 0, None)),
+        in_axes=(0, 0, None),
+    )
 
     def step_body(carry, k):
-        pxi_arr, pxj_arr, min_cost = carry
+        x_ut, y_ut, min_cost = carry
         u_k = u_seq[k + 1]
-        new_pxi, new_pxj, pair_costs = step_all_pairs(
-            pxi_arr, pxj_arr, beta_pi, xi_pi, p_pi, beta_pj, xi_pj, p_pj, u_k
-        )
-        step_cost = jnp.sum(pair_costs)
-        return (new_pxi, new_pxj, jnp.minimum(min_cost, step_cost))
 
-    init_carry = (pxi_arr, pxj_arr, step1_cost)
+        # ── intersect the pair's two observed-output boxes ────────────────
+        y_a, y_b = y_ut[:, 0], y_ut[:, 1]                       # (P, 2N)
+        y_int = jnp.where(lo_half, jnp.maximum(y_a, y_b), jnp.minimum(y_a, y_b))
+        has_overlap = jnp.all(y_int[:, N:] >= y_int[:, :N], axis=-1)   # (P,)
+
+        # ── invert y_int back through each member's output map ────────────
+        # The same four corners _invert_observation takes, {v_lo, v_hi} x
+        # {beta_lo, beta_hi}, arranged so both members are done in one go:
+        # q1 = [v_lo/beta_lo, v_hi/beta_hi] and q2 = [v_lo/beta_hi,
+        # v_hi/beta_lo] between them hold all four, so a min/max across
+        # q1, q2 and then across the two halves is a min/max over the four.
+        v = y_int[:, None, :] - xi_ut_swap                      # (P, 2, 2N)
+        q1, q2 = v / beta_ut, v / beta_ut_swap
+        lo_c, hi_c = jnp.minimum(q1, q2), jnp.maximum(q1, q2)
+        x_ref = jnp.concatenate([
+            jnp.minimum(lo_c[..., :N], lo_c[..., N:]),
+            jnp.maximum(hi_c[..., :N], hi_c[..., N:]),
+        ], axis=-1)
+        x_ref = jnp.where(has_overlap[:, None, None], x_ref, x_ut)
+
+        # ── one Euler step, then the new observed outputs (carried on to
+        #    the next iteration rather than recomputed there) ──────────────
+        x_next = step_all(x_ref, p_pair, u_k)                   # (P, 2, 2N)
+        y_next = beta_ut * x_next + xi_ut                       # (P, 2, 2N)
+
+        # ── _overlap_volume between the pair's two new output boxes ───────
+        a, b = y_next[:, 0], y_next[:, 1]
+        widths = jnp.maximum(
+            jnp.minimum(a[:, N:], b[:, N:]) - jnp.maximum(a[:, :N], b[:, :N]), 0.0
+        )
+        pair_costs = jnp.where(has_overlap, jnp.prod(widths, axis=-1), 0.0)
+        return (x_next, y_next, jnp.minimum(min_cost, jnp.sum(pair_costs)))
+
+    init_carry = (x_ut0, y_ut0, step1_cost)
     _, _, min_cost_final = _run_unrolled_or_loop(step_body, init_carry, num_steps - 1)
     return min_cost_final
 
