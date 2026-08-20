@@ -134,6 +134,14 @@ _U_NOISE_SCALE = jnp.array([0.1 * _HOVER_THRUST, 0.1 * 9.8645e-5, 0.1 * 9.8645e-
 _UNROLL_THRESHOLD = 64
 
 
+def _pair_indices(n: int):
+    """Static (i, j) index arrays for all C(n, 2) unordered pairs, i < j.
+    See admire/nonlinear_chain/integrator_chain/car_fault_diagnosis's
+    identical helper for the full rationale."""
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    return jnp.array([i for i, j in pairs]), jnp.array([j for i, j in pairs])
+
+
 def _project_u(u: jnp.ndarray) -> jnp.ndarray:
     """Project a control input (or batch) onto the feasible box.
 
@@ -468,11 +476,14 @@ def separation_loss(u: jnp.ndarray,
     """
     x_ivls = _propagate_all_scenarios(x0_ivl, u, scenarios, dt, num_steps)
     n = len(x_ivls)
-    total = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            total = total + _overlap_volume(x_ivls[i], x_ivls[j])
-    return total
+    # vmap over all C(n,2) pairs at once instead of a Python "for i: for j:"
+    # double loop -- see _pair_indices' docstring.
+    lo_stack = jnp.stack([iv.lower for iv in x_ivls])
+    hi_stack = jnp.stack([iv.upper for iv in x_ivls])
+    pair_i, pair_j = _pair_indices(n)
+    ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+    ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+    return jnp.sum(jax.vmap(_overlap_volume)(ivl_i, ivl_j))
 
 
 class SeparatingInputOptimizer:
@@ -862,10 +873,16 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     )
     x1_batch = jax.vmap(lambda p: euler_step(emb_sys, x0_ivl, u_seq[0], p, dt))(p_batch)
     x1_ivls = [irx.Interval(lower=x1_batch.lower[i], upper=x1_batch.upper[i]) for i in range(n)]
-    step1_cost = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            step1_cost = step1_cost + pair_cost_fn(x1_ivls[i], x1_ivls[j])
+
+    # vmap over all C(n,2) pairs instead of a Python "for i: for j:" double
+    # loop -- see _pair_indices' docstring (this is the one loop
+    # propagate_with_refinement had left; step_body below was already
+    # vmapped in a previous pass).
+    pair_i, pair_j = _pair_indices(n)
+    step1_cost = jnp.sum(jax.vmap(pair_cost_fn)(
+        irx.Interval(lower=x1_batch.lower[pair_i], upper=x1_batch.upper[pair_i]),
+        irx.Interval(lower=x1_batch.lower[pair_j], upper=x1_batch.upper[pair_j]),
+    ))
 
     pxi_arr = jnp.stack([ivl_to_arr(x1_ivls[i]) for i, j in pairs])
     pxj_arr = jnp.stack([ivl_to_arr(x1_ivls[j]) for i, j in pairs])
