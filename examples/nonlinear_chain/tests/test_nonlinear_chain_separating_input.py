@@ -32,6 +32,8 @@ from nonlinear_chain_separating_input import (
     _invert_observation,
     create_scenarios,
     euler_step,
+    euler_step_ut,
+    _overlap_volume,
     propagate_scenario,
     separation_loss,
     SeparatingInputOptimizer,
@@ -492,3 +494,147 @@ class TestRefinement:
         loss = float(propagate_with_refinement(x0, u_seq, scenarios, dt=0.02, num_steps=3))
         assert np.isfinite(loss)
         assert loss >= 0.0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7. Pair-stacked / ut refinement path vs. the per-pair reference loop
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _reference_propagate_with_refinement(x0_ivl, u_seq, scenarios, dt, num_steps,
+                                         return_flags=False):
+    """Oracle for propagate_with_refinement: the straightforward per-pair loop,
+    written against the module's own Interval-level helpers (euler_step,
+    observed_output, _invert_observation, _overlap_volume).
+
+    The module's version stacks the two members of each pair onto a shared
+    axis, keeps its carry in ut coordinates and inlines the observation
+    inverse, none of which is meant to change a single number -- so this is
+    the thing it has to keep agreeing with.
+    """
+    n = len(scenarios)
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    emb_sys = scenarios[0].emb_system
+
+    x1 = [euler_step(emb_sys, x0_ivl, u_seq[0], s.p_interval, dt) for s in scenarios]
+    y1 = [observed_output(x, s) for x, s in zip(x1, scenarios)]
+    min_cost = jnp.array(0.0)
+    for i, j in pairs:
+        min_cost = min_cost + _overlap_volume(y1[i], y1[j])
+
+    flags = []
+    state = {(i, j): (x1[i], x1[j]) for i, j in pairs}
+    for k in range(num_steps - 1):
+        u_k = u_seq[k + 1]
+        step_cost = jnp.array(0.0)
+        new_state = {}
+        for i, j in pairs:
+            xi_c, xj_c = state[(i, j)]
+            y_i = observed_output(xi_c, scenarios[i])
+            y_j = observed_output(xj_c, scenarios[j])
+            y_lo = jnp.maximum(y_i.lower, y_j.lower)
+            y_hi = jnp.minimum(y_i.upper, y_j.upper)
+            has = jnp.all(y_hi >= y_lo)
+            flags.append(bool(has))
+            y_int = irx.Interval(lower=y_lo, upper=y_hi)
+
+            ri = _invert_observation(y_int, scenarios[i])
+            rj = _invert_observation(y_int, scenarios[j])
+            xi_r = irx.Interval(lower=jnp.where(has, ri.lower, xi_c.lower),
+                                upper=jnp.where(has, ri.upper, xi_c.upper))
+            xj_r = irx.Interval(lower=jnp.where(has, rj.lower, xj_c.lower),
+                                upper=jnp.where(has, rj.upper, xj_c.upper))
+
+            xi_n = euler_step(emb_sys, xi_r, u_k, scenarios[i].p_interval, dt)
+            xj_n = euler_step(emb_sys, xj_r, u_k, scenarios[j].p_interval, dt)
+            raw = _overlap_volume(observed_output(xi_n, scenarios[i]),
+                                  observed_output(xj_n, scenarios[j]))
+            step_cost = step_cost + jnp.where(has, raw, 0.0)
+            new_state[(i, j)] = (xi_n, xj_n)
+        state = new_state
+        min_cost = jnp.minimum(min_cost, step_cost)
+
+    return (min_cost, flags) if return_flags else min_cost
+
+
+# (x0 half-width, constant control) cases. Both branches of the per-pair
+# has_overlap test have to be exercised across the set, which
+# test_reference_cases_exercise_both_overlap_branches pins down -- the first
+# two entries are what reach the False branch. Whether a pair's observed
+# outputs stay disjoint is a race between the boxes growing (~x0 half-width,
+# plus interval-arithmetic overestimation each step) and the scenarios
+# separating (~|1 - alpha| * u * dt, so ~1e-3 per step at these defaults), so
+# the branch flips somewhere between half-widths of 1e-2 and 1e-3.
+_REFINEMENT_CASES = [(1e-5, 0.5), (1e-3, 0.3), (0.05, 0.3),
+                     (0.5, 0.3), (2.0, 0.1), (0.01, 0.9)]
+
+
+def _case_inputs(N, half_width, u_const, num_steps):
+    a, b = default_channel_params(N)
+    scenarios = create_scenarios(N, a, b)
+    x0 = irx.Interval(lower=jnp.full((N,), -half_width),
+                      upper=jnp.full((N,), half_width))
+    u_seq = jnp.tile(jnp.full((N,), u_const), (num_steps, 1))
+    return scenarios, x0, u_seq
+
+
+class TestRefinementMatchesPerPairReference:
+
+    def test_reference_cases_exercise_both_overlap_branches(self):
+        """Guards the two tests below: if every case took the same branch they
+        would only be testing half of the step body."""
+        seen = set()
+        for half_width, u_const in _REFINEMENT_CASES:
+            scenarios, x0, u_seq = _case_inputs(3, half_width, u_const, 4)
+            _, flags = _reference_propagate_with_refinement(
+                x0, u_seq, scenarios, dt=0.02, num_steps=4, return_flags=True)
+            seen.update(flags)
+        assert seen == {True, False}, f"only saw has_overlap in {seen}"
+
+    @pytest.mark.parametrize("half_width,u_const", _REFINEMENT_CASES)
+    @pytest.mark.parametrize("N", [2, 3])
+    def test_value_matches_reference(self, N, half_width, u_const):
+        num_steps = 4
+        scenarios, x0, u_seq = _case_inputs(N, half_width, u_const, num_steps)
+        got = propagate_with_refinement(x0, u_seq, scenarios, dt=0.02, num_steps=num_steps)
+        want = _reference_propagate_with_refinement(
+            x0, u_seq, scenarios, dt=0.02, num_steps=num_steps)
+        np.testing.assert_allclose(np.asarray(got), np.asarray(want),
+                                   rtol=1e-5, atol=1e-30)
+
+    @pytest.mark.parametrize("half_width,u_const", _REFINEMENT_CASES)
+    def test_gradient_matches_reference(self, half_width, u_const):
+        N, num_steps = 3, 4
+        scenarios, x0, u_seq = _case_inputs(N, half_width, u_const, num_steps)
+        g_got = jax.grad(lambda u: propagate_with_refinement(
+            x0, u, scenarios, dt=0.02, num_steps=num_steps))(u_seq)
+        g_want = jax.grad(lambda u: _reference_propagate_with_refinement(
+            x0, u, scenarios, dt=0.02, num_steps=num_steps))(u_seq)
+        np.testing.assert_allclose(np.asarray(g_got), np.asarray(g_want),
+                                   rtol=1e-4, atol=1e-30)
+
+    def test_jit_value_matches_eager(self):
+        """_run_unrolled_or_loop no longer wraps the unrolled chain in
+        jax.checkpoint; this pins that the compiled result is unchanged."""
+        N, num_steps = 3, 4
+        scenarios, x0, u_seq = _case_inputs(N, 0.05, 0.3, num_steps)
+        fn = lambda u: propagate_with_refinement(x0, u, scenarios, dt=0.02,
+                                                 num_steps=num_steps)
+        np.testing.assert_allclose(np.asarray(jax.jit(fn)(u_seq)),
+                                   np.asarray(fn(u_seq)), rtol=1e-5, atol=1e-30)
+
+
+class TestEulerStepUt:
+
+    @pytest.mark.parametrize("N", [1, 2, 4])
+    def test_ut_and_interval_forms_agree(self, N):
+        a, b = default_channel_params(N)
+        scenarios = create_scenarios(N, a, b)
+        nominal = scenarios[0]
+        x0 = irx.Interval(lower=jnp.full((N,), -0.2), upper=jnp.full((N,), 0.3))
+        u = jnp.full((N,), 0.4)
+
+        via_ivl = euler_step(nominal.emb_system, x0, u, nominal.p_interval, 0.02)
+        via_ut = euler_step_ut(nominal.emb_system, irx.i2ut(x0), u,
+                               nominal.p_interval, 0.02)
+        np.testing.assert_allclose(np.asarray(irx.i2ut(via_ivl)),
+                                   np.asarray(via_ut), rtol=1e-6, atol=1e-30)
