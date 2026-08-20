@@ -596,13 +596,25 @@ def optimize_parallel_gpu(opt: 'SeparatingInputOptimizer', num_restarts: int = 1
     u0 = jax.random.normal(key, (num_restarts, opt.N)) * 0.3 + 0.5
 
     batched_loss = jax.vmap(opt.loss_fn)
-    batched_grad = jax.vmap(opt.grad_fn)
+    if num_iters == 0:
+        # Zeroth order: score the random multi-start cloud and keep the best,
+        # with no gradient anywhere in the graph. This has to be a Python-level
+        # branch rather than num_iters=0 falling through the loop below --
+        # jax.lax.scan traces its body even at length zero, so the loop would
+        # compile the whole reverse-mode graph and then never execute it,
+        # inflating compile time and peak memory for a measurement whose whole
+        # point is that no gradient is taken. u0 is projected because the GD
+        # path only ever returns projected iterates, so the best *feasible*
+        # guess is the like-for-like comparison.
+        u_final = _project_u(u0)
+    else:
+        batched_grad = jax.vmap(opt.grad_fn)
 
-    def body(u, _i):
-        g = batched_grad(u)
-        return _project_u(u - learning_rate * g)
+        def body(u, _i):
+            g = batched_grad(u)
+            return _project_u(u - learning_rate * g)
 
-    u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
+        u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
     losses = batched_loss(u_final)
     best_idx = jnp.argmin(losses)
     return u_final[best_idx], losses[best_idx], u_final, losses
@@ -717,13 +729,25 @@ def optimize_multistep_gpu(opt: 'MultistepSequenceOptimizer', num_restarts: int 
     u0 = jax.random.normal(key, (num_restarts, opt.num_segments, opt.N)) * 0.1 + 0.5
 
     batched_loss = jax.vmap(opt.loss_fn)
-    batched_grad = jax.vmap(opt.grad_fn)
+    if num_iters == 0:
+        # Zeroth order: score the random multi-start cloud and keep the best,
+        # with no gradient anywhere in the graph. This has to be a Python-level
+        # branch rather than num_iters=0 falling through the loop below --
+        # jax.lax.scan traces its body even at length zero, so the loop would
+        # compile the whole reverse-mode graph and then never execute it,
+        # inflating compile time and peak memory for a measurement whose whole
+        # point is that no gradient is taken. u0 is projected because the GD
+        # path only ever returns projected iterates, so the best *feasible*
+        # guess is the like-for-like comparison.
+        u_final = _project_u(u0)
+    else:
+        batched_grad = jax.vmap(opt.grad_fn)
 
-    def body(u_batch, _i):
-        g = batched_grad(u_batch)
-        return _project_u(u_batch - learning_rate * g)
+        def body(u_batch, _i):
+            g = batched_grad(u_batch)
+            return _project_u(u_batch - learning_rate * g)
 
-    u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
+        u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
     losses = batched_loss(u_final)
     best_idx = jnp.argmin(losses)
     return u_final[best_idx], losses[best_idx], u_final, losses
@@ -748,6 +772,8 @@ def optimize_multistep(scenarios: List[Scenario], x0_ivl: irx.Interval, dt: floa
     """Multi-start gradient descent over a sequence of control inputs (unrefined loss)."""
     if num_restarts <= 0:
         raise ValueError("num_restarts must be >= 1")
+    if num_iters < 0:
+        raise ValueError("num_iters must be >= 0 (0 = zeroth order, no gradient)")
 
     ms_opt = MultistepSequenceOptimizer(
         scenarios=scenarios, x0_ivl=x0_ivl, dt=dt,
@@ -955,13 +981,25 @@ def optimize_refined_gpu(x0_ivl: irx.Interval, scenarios: List[Scenario], dt: fl
         return refined_overlap_loss(u_seq, x0_ivl, scenarios, dt, num_steps)
 
     batched_loss = jax.vmap(loss_fn_refined)
-    batched_grad = jax.vmap(jax.grad(loss_fn_refined))
+    if num_iters == 0:
+        # Zeroth order: score the random multi-start cloud and keep the best,
+        # with no gradient anywhere in the graph. This has to be a Python-level
+        # branch rather than num_iters=0 falling through the loop below --
+        # jax.lax.scan traces its body even at length zero, so the loop would
+        # compile the whole reverse-mode graph and then never execute it,
+        # inflating compile time and peak memory for a measurement whose whole
+        # point is that no gradient is taken. u0 is projected because the GD
+        # path only ever returns projected iterates, so the best *feasible*
+        # guess is the like-for-like comparison.
+        u_final = _project_u(u0)
+    else:
+        batched_grad = jax.vmap(jax.grad(loss_fn_refined))
 
-    def body(u_batch, _i):
-        g = batched_grad(u_batch)
-        return _project_u(u_batch - learning_rate * g)
+        def body(u_batch, _i):
+            g = batched_grad(u_batch)
+            return _project_u(u_batch - learning_rate * g)
 
-    u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
+        u_final = _run_unrolled_or_loop_nocheckpoint(body, u0, num_iters)
     losses = batched_loss(u_final)
     best_idx = jnp.argmin(losses)
     return u_final[best_idx], losses[best_idx], u_final, losses

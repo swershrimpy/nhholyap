@@ -638,3 +638,47 @@ class TestEulerStepUt:
                                nominal.p_interval, 0.02)
         np.testing.assert_allclose(np.asarray(irx.i2ut(via_ivl)),
                                    np.asarray(via_ut), rtol=1e-6, atol=1e-30)
+
+
+class TestZerothOrder:
+    """num_iters=0 means 'score the multi-start cloud, take the best, never
+    differentiate' -- not 'run a zero-length gradient loop'."""
+
+    def test_returns_best_of_the_projected_initial_cloud(self):
+        N = 2
+        a, b = default_channel_params(N)
+        scenarios = create_scenarios(N, a, b)
+        x0 = small_ivl(N)
+        u_opt, loss_opt, u_all, losses = optimize_refined_gpu(
+            x0, scenarios, dt=0.02, num_steps=3, num_restarts=16,
+            learning_rate=0.05, num_iters=0, seed=0,
+        )
+        # the winner is the argmin of the cloud, and nothing moved off it
+        assert np.isclose(float(loss_opt), float(jnp.min(losses)))
+        np.testing.assert_allclose(np.asarray(u_opt),
+                                   np.asarray(u_all[int(jnp.argmin(losses))]))
+        # every returned control is feasible
+        assert float(jnp.max(jnp.abs(u_all))) <= 1.0 + 1e-6
+
+    def test_no_gradient_is_traced(self):
+        """The point of the Python-level branch: with num_iters=0 the jaxpr
+        must contain no transpose/vjp machinery from differentiating the
+        propagation. A zero-length lax.scan would still have traced it."""
+        N = 2
+        a, b = default_channel_params(N)
+        scenarios = create_scenarios(N, a, b)
+        x0 = small_ivl(N)
+        fn = lambda: optimize_refined_gpu(
+            x0, scenarios, dt=0.02, num_steps=3, num_restarts=4,
+            learning_rate=0.05, num_iters=0, seed=0)
+        txt = str(jax.make_jaxpr(fn)())
+        assert "scan" not in txt, "zeroth order should emit no scan"
+
+    def test_negative_num_iters_rejected(self):
+        N = 2
+        a, b = default_channel_params(N)
+        scenarios = create_scenarios(N, a, b)
+        with pytest.raises(ValueError, match="num_iters"):
+            optimize_multistep(scenarios, small_ivl(N), dt=0.02,
+                               steps_per_segment=1, num_segments=2,
+                               num_restarts=2, num_iters=-1)
