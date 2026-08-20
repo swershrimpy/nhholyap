@@ -78,6 +78,14 @@ _U_LO = jnp.array([-1.0, -1.0])
 _U_HI = jnp.array([1.0, 1.0])
 
 
+def _pair_indices(n: int):
+    """Static (i, j) index arrays for all C(n, 2) unordered pairs, i < j.
+    See admire/nonlinear_chain/integrator_chain's identical helper for the
+    full rationale -- same fix, same shape of problem."""
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    return jnp.array([i for i, j in pairs]), jnp.array([j for i, j in pairs])
+
+
 def _project_u(u: jnp.ndarray) -> jnp.ndarray:
     """Project a control input (or batch) onto the feasible box."""
     return jnp.clip(u, _U_LO, _U_HI)
@@ -356,11 +364,12 @@ def separation_loss(u: jnp.ndarray,
         for s in scenarios
     ]
     n = len(y_ivls)
-    total = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            total = total + _overlap_volume(y_ivls[i], y_ivls[j])
-    return total
+    lo_stack = jnp.stack([iv.lower for iv in y_ivls])
+    hi_stack = jnp.stack([iv.upper for iv in y_ivls])
+    pair_i, pair_j = _pair_indices(n)
+    ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+    ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+    return jnp.sum(jax.vmap(_overlap_volume)(ivl_i, ivl_j))
 
 
 class SeparatingInputOptimizer:
@@ -494,6 +503,8 @@ def separation_loss_multistep(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
     # x_hist_batch: Interval with lower/upper shape (n, num_segments, 3)
     x_hist_batch = jax.vmap(prop_one)(p_batch)
 
+    pair_i, pair_j = _pair_indices(n)
+
     def overlap_at_k(k):
         y_ivls_k = [
             observed_output(
@@ -502,11 +513,13 @@ def separation_loss_multistep(u_seq: jnp.ndarray, x0_ivl: irx.Interval,
             )
             for i in range(n)
         ]
-        total = jnp.array(0.0)
-        for i in range(n):
-            for j in range(i + 1, n):
-                total = total + _overlap_volume(y_ivls_k[i], y_ivls_k[j])
-        return total
+        # vmap over all C(n,2) pairs instead of a Python "for i: for j:"
+        # double loop -- see _pair_indices' docstring.
+        lo_stack = jnp.stack([iv.lower for iv in y_ivls_k])
+        hi_stack = jnp.stack([iv.upper for iv in y_ivls_k])
+        ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+        ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+        return jnp.sum(jax.vmap(_overlap_volume)(ivl_i, ivl_j))
 
     segment_overlaps = jnp.stack([overlap_at_k(k) for k in range(num_segments)])
     return jnp.min(segment_overlaps)
@@ -680,7 +693,7 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     min over steps of per-step pairwise overlap sum (scalar)
     """
     n = len(scenarios)
-    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    pair_i, pair_j = _pair_indices(n)
     xlen = x0_ivl.lower.shape[0]
 
     def ivl_to_arr(ivl: irx.Interval) -> jnp.ndarray:
@@ -692,31 +705,93 @@ def propagate_with_refinement(x0_ivl: irx.Interval, u_seq: jnp.ndarray,
     # ── Step 1: propagate all scenarios one Euler step with u_seq[0] ──────
     x1_ivls = [euler_step(s.emb_system, x0_ivl, u_seq[0], s.p_interval, dt) for s in scenarios]
     y1_ivls = [observed_output(x1, s) for x1, s in zip(x1_ivls, scenarios)]
-    step1_cost = jnp.array(0.0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            step1_cost = step1_cost + _overlap_volume(y1_ivls[i], y1_ivls[j])
 
-    pxi_arr = jnp.stack([ivl_to_arr(x1_ivls[i]) for i, j in pairs])
-    pxj_arr = jnp.stack([ivl_to_arr(x1_ivls[j]) for i, j in pairs])
+    y1_lo = jnp.stack([iv.lower for iv in y1_ivls])
+    y1_hi = jnp.stack([iv.upper for iv in y1_ivls])
+    step1_cost = jnp.sum(jax.vmap(_overlap_volume)(
+        irx.Interval(lower=y1_lo[pair_i], upper=y1_hi[pair_i]),
+        irx.Interval(lower=y1_lo[pair_j], upper=y1_hi[pair_j]),
+    ))
+
+    x1_lo = jnp.stack([iv.lower for iv in x1_ivls])
+    x1_hi = jnp.stack([iv.upper for iv in x1_ivls])
+    pxi_arr = jnp.concatenate([x1_lo[pair_i], x1_hi[pair_i]], axis=-1)
+    pxj_arr = jnp.concatenate([x1_lo[pair_j], x1_hi[pair_j]], axis=-1)
+
+    # emb_system is shared across all scenarios (see module docstring), so
+    # it stays an unbatched closure variable; only the per-scenario
+    # p_interval/obs_offset/obs_scale need pair-gathering.
+    emb_sys = scenarios[0].emb_system
+    p_lo = jnp.stack([s.p_interval.lower for s in scenarios])
+    p_hi = jnp.stack([s.p_interval.upper for s in scenarios])
+    obs_offset = jnp.stack([s.obs_offset for s in scenarios])
+    obs_scale = jnp.stack([s.obs_scale for s in scenarios])
+
+    def _gather(arr, idx):
+        return arr[idx]
+
+    p_pi = irx.Interval(lower=p_lo[pair_i], upper=p_hi[pair_i])
+    p_pj = irx.Interval(lower=p_lo[pair_j], upper=p_hi[pair_j])
+    off_pi, off_pj = _gather(obs_offset, pair_i), _gather(obs_offset, pair_j)
+    scale_pi, scale_pj = _gather(obs_scale, pair_i), _gather(obs_scale, pair_j)
+
+    class _ScenLike:
+        """Minimal duck-typed stand-in for a Scenario, exposing only
+        .obs_offset/.obs_scale -- observed_output/_invert_observation only
+        ever read those two fields, so a per-pair-vmapped slice can pass
+        through the SAME, already-correct functions unchanged."""
+        __slots__ = ("obs_offset", "obs_scale")
+
+        def __init__(self, obs_offset, obs_scale):
+            self.obs_offset = obs_offset
+            self.obs_scale = obs_scale
+
+    def step_one_pair(pxi_arr_1, pxj_arr_1, p_i1, off_i1, scale_i1,
+                      p_j1, off_j1, scale_j1, u_k):
+        x_curr_i = arr_to_ivl(pxi_arr_1)
+        x_curr_j = arr_to_ivl(pxj_arr_1)
+        scen_i = _ScenLike(off_i1, scale_i1)
+        scen_j = _ScenLike(off_j1, scale_j1)
+
+        obs_i = observed_output(x_curr_i, scen_i)
+        obs_j = observed_output(x_curr_j, scen_j)
+        y_lo = jnp.maximum(obs_i.lower, obs_j.lower)
+        y_hi = jnp.minimum(obs_i.upper, obs_j.upper)
+        has_overlap = jnp.all(y_hi >= y_lo)
+        y_int = irx.Interval(lower=y_lo, upper=y_hi)
+
+        x_ref_i_overlap = _invert_observation(y_int, scen_i, x_curr_i)
+        x_ref_j_overlap = _invert_observation(y_int, scen_j, x_curr_j)
+
+        x_ref_i = irx.Interval(
+            lower=jnp.where(has_overlap, x_ref_i_overlap.lower, x_curr_i.lower),
+            upper=jnp.where(has_overlap, x_ref_i_overlap.upper, x_curr_i.upper),
+        )
+        x_ref_j = irx.Interval(
+            lower=jnp.where(has_overlap, x_ref_j_overlap.lower, x_curr_j.lower),
+            upper=jnp.where(has_overlap, x_ref_j_overlap.upper, x_curr_j.upper),
+        )
+
+        x_next_i = euler_step(emb_sys, x_ref_i, u_k, p_i1, dt)
+        x_next_j = euler_step(emb_sys, x_ref_j, u_k, p_j1, dt)
+
+        raw_cost = _overlap_volume(
+            observed_output(x_next_i, scen_i),
+            observed_output(x_next_j, scen_j),
+        )
+        pair_cost = jnp.where(has_overlap, raw_cost, jnp.array(0.0))
+        return ivl_to_arr(x_next_i), ivl_to_arr(x_next_j), pair_cost
+
+    step_all_pairs = jax.vmap(step_one_pair, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None))
 
     def step_body(k, carry):
         pxi_arr, pxj_arr, min_cost = carry
         u_k = u_seq[k + 1]
-        step_cost = jnp.array(0.0)
-        new_pxi, new_pxj = [], []
-
-        for idx, (i, j) in enumerate(pairs):
-            x_curr_i = arr_to_ivl(pxi_arr[idx])
-            x_curr_j = arr_to_ivl(pxj_arr[idx])
-            x_next_i, x_next_j, _, _, pair_cost, _ = _refine_and_step_pair(
-                x_curr_i, x_curr_j, scenarios[i], scenarios[j], u_k, dt
-            )
-            step_cost = step_cost + pair_cost
-            new_pxi.append(ivl_to_arr(x_next_i))
-            new_pxj.append(ivl_to_arr(x_next_j))
-
-        return (jnp.stack(new_pxi), jnp.stack(new_pxj), jnp.minimum(min_cost, step_cost))
+        new_pxi, new_pxj, pair_costs = step_all_pairs(
+            pxi_arr, pxj_arr, p_pi, off_pi, scale_pi, p_pj, off_pj, scale_pj, u_k
+        )
+        step_cost = jnp.sum(pair_costs)
+        return (new_pxi, new_pxj, jnp.minimum(min_cost, step_cost))
 
     init_carry = (pxi_arr, pxj_arr, step1_cost)
     _, _, min_cost_final = jax.lax.fori_loop(0, num_steps - 1, step_body, init_carry)
