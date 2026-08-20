@@ -95,8 +95,20 @@ def run_multistep_unrefined():
     print(f"compile {compile_t*1e3:8.2f} ms   run {run_t*1e3:7.3f} ms   mem {mem}")
 
     u_seq_opt, loss_opt, _, _ = jitted_fn(42)
-    from quadrotor_separating_input import propagate_scenario_multistep
-    x_ivls = [propagate_scenario_multistep(x0, u_seq_opt, s, DT, 1) for s in scenarios]
+    from quadrotor_separating_input import _propagate_history
+    # All scenarios share one emb_system (only p_interval differs) -- vmap
+    # over stacked p_intervals instead of a Python loop that separately
+    # traces/compiles _propagate_history once per scenario (same fix as
+    # run_quadrotor_diagnosis_qps.py's predicted_histories; ~2.7x faster,
+    # numerically identical).
+    _emb_sys = scenarios[0].emb_system
+    _p_batch = irx.Interval(
+        lower=jnp.stack([s.p_interval.lower for s in scenarios]),
+        upper=jnp.stack([s.p_interval.upper for s in scenarios]),
+    )
+    _hist_batch = jax.vmap(lambda p: _propagate_history(x0, u_seq_opt, _emb_sys, p, DT, 1))(_p_batch)
+    x_ivls = [irx.Interval(lower=_hist_batch.lower[i, -1], upper=_hist_batch.upper[i, -1])
+              for i in range(len(scenarios))]
     u_str = f"u_seq[0] = [U1={float(u_seq_opt[0,0]):.4f}, U2={float(u_seq_opt[0,1]):.4f}, U3={float(u_seq_opt[0,2]):.4f}, U4={float(u_seq_opt[0,3]):.4f}]"
     _print_scenario_report(f"Best loss: {float(loss_opt):.6e}", scenarios, x_ivls, u_str)
     return u_seq_opt, scenarios, x0

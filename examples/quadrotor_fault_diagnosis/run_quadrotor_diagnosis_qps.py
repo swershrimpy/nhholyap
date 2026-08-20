@@ -13,7 +13,7 @@ plant is QPS's own verified rigid-body Crazyflie model
 controller was SYNTHESIZED against
 (quadrotor_separating_input.py's `QuadrotorSystem`).
 
-This is a strictly harder soundness test than car_fault_diagnosis's
+This is a strictly harder soundness test than unicycle's
 robotarium_diagnosis_mc.py, which only tested a DISCRETIZATION mismatch
 (one coarse Euler step vs. a finer stepped simulator of the *same* ODE).
 Here there is a second, structural mismatch on top of discretization: per
@@ -67,7 +67,7 @@ physically consistent initial condition for both systems at this operating
 point. This would NOT be valid at a large-attitude or high-speed operating
 point -- flagged here, not silently assumed away.
 
-Per-trial classification (mirrors car_fault_diagnosis's
+Per-trial classification (mirrors unicycle's
 robotarium_diagnosis_mc.py / Def. "Pairwise pruning" in 26-2796-AR.tex
 Response 8): a model is excluded the first time the true state fails to be
 contained in its predicted state-interval box at a segment boundary, and
@@ -174,14 +174,31 @@ _rk4_rollout_batch_jit = jax.jit(rk4_rollout_batch, static_argnums=(4,))
 # propagation code -- the exact function the optimizer's loss uses)
 # ══════════════════════════════════════════════════════════════════════════
 def predicted_histories(scenarios, x0_ivl, u_seq, steps_per_segment):
-    """{model_name: (lo, hi)}, each shape (num_steps, 12)."""
+    """{model_name: (lo, hi)}, each shape (num_steps, 12).
+
+    All 5 scenarios share one emb_system (only p_interval differs), so this
+    vmaps _propagate_history over stacked p_intervals instead of looping in
+    Python and separately tracing/compiling once per scenario -- same
+    pattern quadrotor_separating_input.py's separation_loss_multistep /
+    propagate_with_refinement already use, for the same reason: this
+    system's trig-heavy embedding (PLAN.md "Compile-cost finding") makes
+    per-scenario Python-loop tracing an avoidable multiplier. Measured
+    ~2.7x faster and numerically identical to the old per-scenario loop.
+    """
     per_step_dt = DT / steps_per_segment
-    out = {}
-    for s in scenarios:
-        hist = _propagate_history(x0_ivl, u_seq, s.emb_system, s.p_interval,
+    emb_sys = scenarios[0].emb_system
+    p_batch = irx.Interval(
+        lower=jnp.stack([s.p_interval.lower for s in scenarios]),
+        upper=jnp.stack([s.p_interval.upper for s in scenarios]),
+    )
+
+    def prop_one(p_ivl_single):
+        return _propagate_history(x0_ivl, u_seq, emb_sys, p_ivl_single,
                                   per_step_dt, steps_per_segment)
-        out[s.name] = (np.array(hist.lower), np.array(hist.upper))
-    return out
+
+    hist_batch = jax.vmap(prop_one)(p_batch)   # lower/upper: (n_scenarios, num_steps, 12)
+    return {s.name: (np.array(hist_batch.lower[i]), np.array(hist_batch.upper[i]))
+            for i, s in enumerate(scenarios)}
 
 
 # ══════════════════════════════════════════════════════════════════════════

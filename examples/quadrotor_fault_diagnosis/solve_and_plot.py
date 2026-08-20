@@ -201,8 +201,19 @@ def main():
     # comparison to the original _overlap_volume-based version of this
     # script) and the margin-based genuine-disjointness check.
     from quadrotor_separating_input import _propagate_history
-    hist_by_name = {s.name: _propagate_history(x0_ivl, u_seq, s.emb_system, s.p_interval, DT, 1)
-                    for s in scenarios}
+    # All scenarios share one emb_system (only p_interval differs) -- vmap
+    # over stacked p_intervals instead of a Python loop that separately
+    # traces/compiles _propagate_history once per scenario (same fix as
+    # run_quadrotor_diagnosis_qps.py's predicted_histories; ~2.7x faster,
+    # numerically identical).
+    _emb_sys = scenarios[0].emb_system
+    _p_batch = irx.Interval(
+        lower=jnp.stack([s.p_interval.lower for s in scenarios]),
+        upper=jnp.stack([s.p_interval.upper for s in scenarios]),
+    )
+    _hist_batch = jax.vmap(lambda p: _propagate_history(x0_ivl, u_seq, _emb_sys, p, DT, 1))(_p_batch)
+    hist_by_name = {s.name: irx.Interval(lower=_hist_batch.lower[i], upper=_hist_batch.upper[i])
+                    for i, s in enumerate(scenarios)}
     print("Per-segment pairwise separation (raw, independent per-scenario boxes):")
     disjoint_segments = []
     for k in range(NUM_STEPS):

@@ -1,6 +1,6 @@
 """
 Success-rate analysis for ADMIRE actuator-fault diagnosis, mirroring
-car_fault_diagnosis/success_rate_analysis.py's double-vmapped
+unicycle/success_rate_analysis.py's double-vmapped
 (config x restart), one-jit-per-method sweep design.
 
 Fault modes: UNCHANGED from the folder's existing setup -- all 11 scenarios
@@ -39,7 +39,7 @@ these horizons its u_seq shape matches refined's exactly: (num_steps, 10).
 
 WHY THIS IS ORGANIZED AS ONE JIT PER (METHOD, HORIZON), NOT PER METHOD
 -----------------------------------------------------------------------
-car_fault_diagnosis's script keeps horizon (dt, num_steps) STATIC across
+unicycle's script keeps horizon (dt, num_steps) STATIC across
 its whole sweep, so every config fits in one jax.jit via double-vmap. This
 sweep varies horizon itself, and num_steps is a Python-level loop-trip
 count (jax.lax.scan/fori_loop length), not a traceable value -- it cannot
@@ -114,7 +114,7 @@ X0_NOM = jnp.zeros(9).at[0].set(343.0 * 0.3)   # matches admire_separating_input
 
 SUCCESS_THRESHOLD = 1e-6   # rad^2 (refined) / rad^3 (single-step, multistep -- see overlap_size_log); loss below this = "fully separated"
 
-NUM_RESTARTS = 20     # smaller than car_fault_diagnosis's 100: 10-D control
+NUM_RESTARTS = 20     # smaller than unicycle's 100: 10-D control
 NUM_ITERS = 100        # (up to 200 free params/restart at the 2.0s horizon)
 LEARNING_RATE = 0.05   # and higher per-restart cost -- see resource estimate
 SEED = 42

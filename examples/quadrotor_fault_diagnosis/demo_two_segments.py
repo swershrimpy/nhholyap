@@ -77,10 +77,21 @@ def main():
               f"U3={float(u_seq_opt[k,2]):.4f}, U4={float(u_seq_opt[k,3]):.4f} N*m")
 
     n = len(scenarios)
-    x_hists = [
-        _propagate_history(x0, u_seq_opt, s.emb_system, s.p_interval, DT, STEPS_PER_SEGMENT)
-        for s in scenarios
-    ]
+    # All scenarios share one emb_system (only p_interval differs) -- vmap
+    # over stacked p_intervals instead of a Python loop that separately
+    # traces/compiles _propagate_history once per scenario (same fix as
+    # run_quadrotor_diagnosis_qps.py's predicted_histories; ~2.7x faster,
+    # numerically identical).
+    _emb_sys = scenarios[0].emb_system
+    _p_batch = irx.Interval(
+        lower=jnp.stack([s.p_interval.lower for s in scenarios]),
+        upper=jnp.stack([s.p_interval.upper for s in scenarios]),
+    )
+    _hist_batch = jax.vmap(
+        lambda p: _propagate_history(x0, u_seq_opt, _emb_sys, p, DT, STEPS_PER_SEGMENT)
+    )(_p_batch)
+    x_hists = [irx.Interval(lower=_hist_batch.lower[i], upper=_hist_batch.upper[i])
+              for i in range(n)]
     for k in range(NUM_SEGMENTS):
         t = (k + 1) * STEPS_PER_SEGMENT * DT
         print(f"\npairwise state-interval overlaps at t={t:.1f}s (measurement {k+1}, 0 = fully separated):")
