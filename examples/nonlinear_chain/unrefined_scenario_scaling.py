@@ -52,8 +52,16 @@ RUN_TIME_REPEATS = 100
 DT = 0.02
 STEPS_PER_SEGMENT = 1
 NUM_SEGMENTS = 4
-NUM_RESTARTS = 20
-NUM_ITERS = 15
+# Multi-start width is close to free here: the optimiser is one vmap over
+# restarts, and at N=10 even 256 of them is a few hundred KB per step --
+# far below the width that would make this GPU work for its living (the
+# measured device peak at 20 restarts was 20-25MB on a 32GB V100).
+# Iteration count, by contrast, is a scan the runtime is linear in. So
+# spend on restarts and take it back on iterations: 12.8x the coverage
+# for ~1.9x fewer iterations. Check the CSV `loss` column stays in the
+# same ballpark as the 20/15 rows before trusting a re-run.
+NUM_RESTARTS = 256
+NUM_ITERS = 8
 LEARNING_RATE = 0.1
 
 # Per-point subprocess guard rails -- see run_worker_with_limits and this
