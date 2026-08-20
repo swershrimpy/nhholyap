@@ -449,18 +449,34 @@ def create_scenarios(
 # 3.  Single-Step Path
 # ══════════════════════════════════════════════════════════════════════════════
 
-def euler_step(emb_sys, x_ivl: irx.Interval, u: jnp.ndarray,
-               p_ivl: irx.Interval, dt: float) -> irx.Interval:
-    """One forward-Euler interval step via the natural embedding.
+def euler_step_ut(emb_sys, x_ut: jnp.ndarray, u: jnp.ndarray,
+                  p_ivl: irx.Interval, dt: float) -> jnp.ndarray:
+    """One forward-Euler interval step, taking and returning upper-triangular
+    (ut) coordinates -- a single concatenate([lower, upper]) vector.
+
+    This holds all of euler_step's arithmetic; euler_step is now just this
+    with an i2ut on the way in and a ut2i on the way out. immrax's embedding
+    consumes and produces ut vectors natively (InclusionEmbedding.E splits
+    the ut argument itself), so a caller that already holds its state in ut
+    form -- propagate_with_refinement's loop carry -- calls this directly and
+    skips a split-and-re-concatenate that carries no arithmetic at all. That
+    matters here because the program is bound by kernel-launch count rather
+    than by FLOPs.
 
     Note: t must be a JAX array (not a Python scalar) so that
     eqx.filter_make_jaxpr traces it as an abstract input and the jaxpr
     invar count matches the natif_jaxpr arg count.
     """
     _t = jnp.zeros(())
-    x_ut = irx.i2ut(x_ivl)
     dx_ut = emb_sys.f(_t, x_ut, u, p_ivl)
-    return irx.ut2i(dx_ut * dt + x_ut)
+    return dx_ut * dt + x_ut
+
+
+def euler_step(emb_sys, x_ivl: irx.Interval, u: jnp.ndarray,
+               p_ivl: irx.Interval, dt: float) -> irx.Interval:
+    """One forward-Euler interval step via the natural embedding, in and out
+    as an Interval. Thin wrapper over euler_step_ut -- see there."""
+    return irx.ut2i(euler_step_ut(emb_sys, irx.i2ut(x_ivl), u, p_ivl, dt))
 
 
 def _propagate_by_params(x0_ivl: irx.Interval, u: jnp.ndarray, emb_sys,
