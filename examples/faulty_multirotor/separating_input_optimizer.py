@@ -35,18 +35,22 @@ def pairwise_overlap_sum(intervals: List[irx.Interval],
     if n < 2:
         return jnp.array(0.0)
 
-    # Compute all pairwise overlaps
-    overlaps = []
-    pair_idx = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            overlap_val = overlap_fn(intervals[i], intervals[j])
-            if scaling_weights is not None:
-                overlap_val = overlap_val * scaling_weights[pair_idx]
-                pair_idx += 1
-            overlaps.append(overlap_val)
+    # vmap overlap_fn over all C(n,2) pairs at once instead of a Python
+    # "for i: for j:" double loop -- same fix as the other examples'
+    # separating-input modules (admire, nonlinear_chain, integrator_chain,
+    # car_fault_diagnosis, quadrotor_fault_diagnosis, faulty_car).
+    lo_stack = jnp.stack([iv.lower for iv in intervals])
+    hi_stack = jnp.stack([iv.upper for iv in intervals])
+    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    pair_i = jnp.array([i for i, j in pairs])
+    pair_j = jnp.array([j for i, j in pairs])
+    ivl_i = irx.Interval(lower=lo_stack[pair_i], upper=hi_stack[pair_i])
+    ivl_j = irx.Interval(lower=lo_stack[pair_j], upper=hi_stack[pair_j])
+    overlaps = jax.vmap(overlap_fn)(ivl_i, ivl_j)
+    if scaling_weights is not None:
+        overlaps = overlaps * scaling_weights
 
-    return jnp.sum(jnp.array(overlaps))
+    return jnp.sum(overlaps)
 
 
 def overlap_size_lax(interval1: irx.Interval, interval2: irx.Interval) -> float:
