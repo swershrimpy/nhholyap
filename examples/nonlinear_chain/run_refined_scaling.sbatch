@@ -94,6 +94,16 @@ mkdir -p "${PIP_CACHE_DIR}"
 # it will NOT override this once it's set here; its own worker subprocesses
 # inherit this env var too.
 export JAX_PLATFORMS=cuda
+
+# Launch-overhead mitigation. This workload is a long sequence of very small
+# kernels -- a propagation step touches a couple of kilobytes at these batch
+# sizes -- so wall time is dominated by per-kernel launch overhead rather
+# than by arithmetic. Command buffers capture the launch sequence into a CUDA
+# graph and replay it, which is exactly that case. Verified present in the
+# installed jaxlib 0.6.2 (unknown XLA flags are rejected, so this is checked
+# rather than assumed); FUSION is the one that matters here, the other two
+# are harmless and cover the occasional gemm/custom call.
+export XLA_FLAGS="${XLA_FLAGS:-} --xla_gpu_enable_command_buffer=FUSION,CUBLAS,CUSTOM_CALL"
 "${PY}" -c "import jax; print('JAX devices:', jax.devices())"
 
 cd "${EXAMPLE_DIR}"
