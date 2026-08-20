@@ -44,11 +44,17 @@ from runtime_scaling_common import (
 )
 
 N = 10
-CSV_PATH = _HERE / "refined_scenario_scaling_v2.csv"
+CSV_PATH = _HERE / os.environ.get("NLCHAIN_CSV", "refined_scenario_scaling_v2.csv")
 RUN_TIME_REPEATS = 100
 
 DT = 0.02
 NUM_STEPS = 3
+# Sweep configuration. Overridable from the environment so one script can
+# serve several concurrently-queued jobs with different settings: the
+# defaults below reproduce exactly what an un-overridden run does, and the
+# per-point worker subprocesses inherit the variables. Every value lands in
+# the CSV row too, so a file always records the configuration that produced
+# it.
 # Multi-start width is close to free here: the optimiser is one vmap over
 # restarts, and at N=10 even 256 of them is a few hundred KB per step --
 # far below the width that would make this GPU work for its living (the
@@ -57,8 +63,8 @@ NUM_STEPS = 3
 # spend on restarts and take it back on iterations: 12.8x the coverage
 # for ~1.9x fewer iterations. Check the CSV `loss` column stays in the
 # same ballpark as the 20/15 rows before trusting a re-run.
-NUM_RESTARTS = 256
-NUM_ITERS = 8
+NUM_RESTARTS = int(os.environ.get("NLCHAIN_NUM_RESTARTS", 256))
+NUM_ITERS = int(os.environ.get("NLCHAIN_NUM_ITERS", 8))
 LEARNING_RATE = 0.1
 
 # Per-point subprocess guard rails -- see run_worker_with_limits and
