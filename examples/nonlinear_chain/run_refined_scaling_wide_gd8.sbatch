@@ -102,10 +102,14 @@ export XLA_FLAGS="${XLA_FLAGS:-} --xla_gpu_enable_command_buffer=FUSION,CUBLAS,C
 
 # ---------------------------------------------------------------------------
 # WIDE restarts + 8 GD iterations. See header MEMORY NOTE above.
+#
+# Runs refined_scenario_scaling_wide_gd8.py -- a STANDALONE script, not
+# refined_scenario_scaling.py with env overrides. See
+# run_unrefined_scaling_wide_gd8.sbatch's comment for why: this job's config
+# got silently reverted mid-run by another process running git checkouts
+# against this same working directory. NUM_RESTARTS/NUM_ITERS are hardcoded
+# in the standalone file, so no NLCHAIN_* env vars are needed here.
 # ---------------------------------------------------------------------------
-export NLCHAIN_NUM_RESTARTS=200000
-export NLCHAIN_NUM_ITERS=8
-export NLCHAIN_CSV=refined_scenario_scaling_wide_gd8.csv
 "${PY}" -c "import jax; print('JAX devices:', jax.devices())"
 
 cd "${EXAMPLE_DIR}"
@@ -115,6 +119,6 @@ echo "================================================================"
 echo "  REFINED scenario-count runtime/RAM/VRAM sweep (wide restarts, 8 GD iters)"
 echo "  Started: $(date)"
 echo "================================================================"
-"${PY}" refined_scenario_scaling.py
+"${PY}" refined_scenario_scaling_wide_gd8.py
 echo "Refined scenario sweep complete at $(date)"
 echo "CSV written to: ${EXAMPLE_DIR}/refined_scenario_scaling_wide_gd8.csv"

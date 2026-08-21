@@ -109,10 +109,15 @@ export XLA_FLAGS="${XLA_FLAGS:-} --xla_gpu_enable_command_buffer=FUSION,CUBLAS,C
 
 # ---------------------------------------------------------------------------
 # WIDE restarts + 8 GD iterations. See header SEVERE MEMORY WARNING above.
+#
+# Runs unrefined_scenario_scaling_wide_gd8.py -- a STANDALONE script, not
+# unrefined_scenario_scaling.py with env overrides. This job's first attempt
+# (env-var override of the shared script) got its config silently reverted
+# mid-run by another process running git checkouts against this same working
+# directory; see unrefined_scenario_scaling_wide_gd8.py's module docstring
+# for the full incident. NUM_RESTARTS/NUM_ITERS are hardcoded in that
+# standalone file, so no NLCHAIN_* env vars are needed here.
 # ---------------------------------------------------------------------------
-export NLCHAIN_NUM_RESTARTS=1200000
-export NLCHAIN_NUM_ITERS=8
-export NLCHAIN_CSV=unrefined_scenario_scaling_wide_gd8.csv
 "${PY}" -c "import jax; print('JAX devices:', jax.devices())"
 
 cd "${EXAMPLE_DIR}"
@@ -122,6 +127,6 @@ echo "================================================================"
 echo "  UNREFINED scenario-count runtime/RAM/VRAM sweep (wide restarts, 8 GD iters)"
 echo "  Started: $(date)"
 echo "================================================================"
-"${PY}" unrefined_scenario_scaling.py
+"${PY}" unrefined_scenario_scaling_wide_gd8.py
 echo "Unrefined scenario sweep complete at $(date)"
 echo "CSV written to: ${EXAMPLE_DIR}/unrefined_scenario_scaling_wide_gd8.csv"
